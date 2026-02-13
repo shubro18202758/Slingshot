@@ -1,0 +1,10 @@
+Ôû▓ Next.js 16.1.6 (Turbopack)
+- Local:         http://localhost:3001
+- Network:       http://192.168.56.1:3001
+
+Ô£ô Starting...
+Ô£ô Ready in 1049ms
+Ôùï Compiling / ...
+ GET / 200 in 9.2s (compile: 8.2s, render: 1008ms)
+Ôùï Compiling /research ...
+ GET /research 200 in 8.4s (compile: 8.3s, render: 119ms)
