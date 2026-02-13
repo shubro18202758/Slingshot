@@ -64,7 +64,7 @@ A unified dashboard visualizing your entire academic life.
 - **Quick Capture**: Drop thoughts, tasks, and links instantly.
 - **Calendar Matrix**: Syncs assignments, exams, and imported events.
 
-![Start Screen](assets/feature_nexus_hud.jpg)
+![Start Screen](assets/feature_nexus_hud.gif)
 
 ### 2. **AI-Powered Event Ingestion** 🎫
 Never miss a hackathon or meetup again.
@@ -78,12 +78,12 @@ Your personal academic wiki.
 - **Auto-Tagging**: AI organizes your documents for you.
 - **Vector Search**: Find connections between disparate concepts.
 
-![Neural Link](assets/feature_neural_link.jpg)
+![Neural Link](assets/feature_neural_link.gif)
 
 ### 4. **AI Core Visualization**
 Real-time monitoring of your neural network's status, token usage, and reasoning depth.
 
-![AI Core](assets/feature_ai_core.jpg)
+![AI Core](assets/feature_ai_core.gif)
 
 ---
 
@@ -99,7 +99,7 @@ Real-time monitoring of your neural network's status, token usage, and reasoning
 
 ### **System HUD**
 *Real-time data streams.*
-![Data Stream](assets/feature_data_stream.jpg)
+![Data Stream](assets/feature_data_stream.gif)
 
 ---
 
