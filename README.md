@@ -4,12 +4,11 @@
 # 🚀 **SLINGSHOT** 
 ### *The Ultimate Cyberpunk Student OS*
 
-![Cyberpunk Banner](https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExM2Q1Z3o5Z3o5Z3o5Z3o5Z3o5Z3o5/ExampleCyberpunkCity.gif)
-<!-- If the above GIF doesn't load, imagine a neon-drenched futuristic dashboard here. Replace with your own `assets/banner.webp` -->
+![Banner](assets/banner.webp)
 
 [![Next.js](https://img.shields.io/badge/Next.js-15.0-000000?style=for-the-badge&logo=next.o&logoColor=white)](https://nextjs.org/)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.0-blue?style=for-the-badge&logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
-[![AI Powered](https://img.shields.io/badge/AI-NeuroLink-ff00ff?style=for-the-badge&logo=openai&logoColor=white)](https://openai.com/)
+[![DeepSeek R1](https://img.shields.io/badge/DeepSeek-R1_Distill_8B-purple?style=for-the-badge&logo=openai&logoColor=white)](https://huggingface.co/deepseek-ai/DeepSeek-R1-Distill-Qwen-7B)
 [![Database](https://img.shields.io/badge/PGlite-In--Browser-336699?style=for-the-badge&logo=postgresql&logoColor=white)](https://electric-sql.com/)
 [![License](https://img.shields.io/badge/License-MIT-green?style=for-the-badge)](LICENSE)
 
@@ -25,19 +24,35 @@ Stop juggling tabs. Stop missing deadlines. **Start orchestrating your future.**
 
 ---
 
-## 🧠 **Neural Architecture (Tech Stack)**
+## 🧠 **Neural Architecture (Tech Stack Deep Dive)**
 
-This system runs on the bleeding edge of web technology:
+This system runs on the bleeding edge of web technology. Here is the classified schematic:
 
 | Component | Technology | Description |
 | :--- | :--- | :--- |
 | **Core** | **Next.js 15 (App Router)** | The react framework for production. |
 | **Language** | **TypeScript** | Type-safe, scalable code. |
-| **Database** | **PGlite + Drizzle ORM** | A full Postgres database running *inside* your browser (WASM). **Zero latency.** |
 | **Styles** | **Tailwind CSS v4 + Shadcn UI** | Sleek, glassmorphic, neobrutalist design system. |
-| **AI Engine** | **Gemini / Groq / WebLLM** | Local-first and cloud-hybrid reasoning engines. |
-| **Automation** | **Stagehand + Puppeteer** | Autonomous web agents that browse for you. |
 | **Connectivity** | **WhatsApp Web.js** | Bridge your chats directly into your workflow. |
+
+### 🤖 **The Reasoning Core: DeepSeek R1 (Local)**
+At the heart of Slingshot lies **DeepSeek-R1-0528-Qwen3-8B-q4f16_1-MLC**. This is not an API call to a distant server; this is a **local, quantization-optimized** Large Language Model running directly on your GPU via WebGPU.
+
+*   **Model ID**: `DeepSeek-R1-0528-Qwen3-8B`
+*   **Architecture**: 8B Parameters, distilled from larger reasoning models.
+*   **Optimization**: 4-bit quantization (~5.7GB VRAM requirement).
+*   **Performance**: Runs at near-native speeds on consumer hardware (RTX 3060/4070+) using `MLC-LLM` and WebGPU. **No data leaves your machine.**
+
+### 💽 **The Memory Bank: PGlite**
+We killed latency by moving the database *inside* the browser.
+*   **PGlite**: A full Postgres instance compiled to WASM. 
+*   **Reactive**: Changes sync instantly across tabs and persist via IndexedDB.
+*   **Vector Ready**: Native `pgvector` support enabled for RAG (Retrieval Augmented Generation) workflows directly in the client.
+
+### 🕵️ **The Agent: Stagehand**
+An autonomous browser agent that acts as your digital twin.
+*   **Capabilities**: Can navigate websites, extract data, and fill forms.
+*   **Workflow**: Triggered by the AI Core to apply for events, fetch deeper context, or automate repetitive tasks.
 
 ---
 
@@ -48,6 +63,8 @@ A unified dashboard visualizing your entire academic life.
 - **Focus Mode**: Zen-like distraction-free writing environment.
 - **Quick Capture**: Drop thoughts, tasks, and links instantly.
 - **Calendar Matrix**: Syncs assignments, exams, and imported events.
+
+![Start Screen](assets/feature_nexus_hud.jpg)
 
 ### 2. **AI-Powered Event Ingestion** 🎫
 Never miss a hackathon or meetup again.
@@ -61,10 +78,12 @@ Your personal academic wiki.
 - **Auto-Tagging**: AI organizes your documents for you.
 - **Vector Search**: Find connections between disparate concepts.
 
-### 4. **Task Force** ✅
-A task manager that actually helps you work.
-- **Eisenhower Matrix**: Auto-prioritize tasks based on urgency and importance.
-- **AI Breakdown**: Turn vague goals ("Study for calc") into actionable steps.
+![Neural Link](assets/feature_neural_link.jpg)
+
+### 4. **AI Core Visualization**
+Real-time monitoring of your neural network's status, token usage, and reasoning depth.
+
+![AI Core](assets/feature_ai_core.jpg)
 
 ---
 
@@ -77,6 +96,10 @@ A task manager that actually helps you work.
 ### **Event Intelligence**
 *AI scanning your chats for opportunities.*
 ![Calendar View](assets/calendar_view_verification_1770943568286.webp)
+
+### **System HUD**
+*Real-time data streams.*
+![Data Stream](assets/feature_data_stream.jpg)
 
 ---
 
