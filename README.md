@@ -6,7 +6,7 @@
 <br/>
 
 <!-- Animated Typing Effect -->
-<a href="https://git.io/typing-svg"><img src="https://readme-typing-svg.demolab.com?font=Fira+Code&weight=600&size=22&duration=3000&pause=1000&color=00D4FF&center=true&vCenter=true&multiline=true&repeat=true&width=700&height=100&lines=%F0%9F%A7%A0+Local+AI+%7C+DeepSeek+R1+on+WebGPU;%F0%9F%94%97+Agentic+RAG+%7C+Cross-Encoder+Reranking;%F0%9F%A4%96+Autonomous+Agent+%7C+Human-in-the-Loop;%F0%9F%92%BE+In-Browser+Postgres+%7C+Zero+Latency" alt="Typing SVG" /></a>
+<a href="https://git.io/typing-svg"><img src="https://readme-typing-svg.demolab.com?font=Fira+Code&weight=600&size=22&duration=3000&pause=1000&color=00D4FF&center=true&vCenter=true&multiline=true&repeat=true&width=700&height=150&lines=%F0%9F%A7%A0+Local+AI+%7C+DeepSeek+R1+on+WebGPU;%F0%9F%94%97+Agentic+RAG+%7C+Cross-Encoder+Reranking;%F0%9F%A4%96+Autonomous+Agent+%7C+Human-in-the-Loop;%F0%9F%92%BE+In-Browser+Postgres+%7C+Zero+Latency" alt="Typing SVG" /></a>
 
 <br/><br/>
 
