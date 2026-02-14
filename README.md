@@ -23,6 +23,7 @@
 <br/>
 
 > *"The future is already here — it's just not evenly distributed."* — William Gibson
+<img width="534" height="532" alt="media__1771006711136" src="https://github.com/user-attachments/assets/04926118-d54c-47b9-bba8-683e01d3af88" />
 
 </div>
 
@@ -50,6 +51,7 @@ One unified command center that:
 <br clear="right"/>
 
 ---
+<img width="538" height="533" alt="media__1771006749695" src="https://github.com/user-attachments/assets/7bb40126-d937-46fd-b23b-dfb69f29b1cb" />
 
 ## 🧠 Neural Architecture — Deep Technical Dive
 
@@ -96,6 +98,7 @@ This is not a toy wrapper around an API. Slingshot runs a **full 8-billion param
 └─────────────────────────────────────────┘
          🔒 Nothing leaves your machine
 ```
+<img width="555" height="529" alt="media__1771006729610" src="https://github.com/user-attachments/assets/47dd8a63-1f36-4202-8ff7-dc35a066127f" />
 
 ### 📊 Agentic RAG Pipeline (Retrieval-Augmented Generation)
 
@@ -139,6 +142,7 @@ Slingshot implements a **state-of-the-art, two-stage Agentic RAG pipeline** — 
   │  (Reasoning)      │
   └──────────────────┘
 ```
+<img width="546" height="532" alt="media__1771006779158" src="https://github.com/user-attachments/assets/9a152e01-4641-480f-b527-b91e76b51cc3" />
 
 ### 💽 The Memory Bank: PGlite (In-Browser Postgres)
 
@@ -166,6 +170,7 @@ An AI-powered browser agent that acts as your **digital twin** — it can naviga
 | **Mode: Submit** | Full execution: fills and submits after human approval |
 
 ---
+<img width="536" height="542" alt="media__1771006797126" src="https://github.com/user-attachments/assets/49cf3b7c-fc97-48d4-b533-2ee992027a9c" />
 
 ## ⚡ Feature Constellation
 
