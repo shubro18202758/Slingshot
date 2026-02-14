@@ -35,7 +35,7 @@
 
 **Slingshot** is a **full-stack, AI-native operating system for students** — built to replace the chaos of 15 browser tabs, 3 note apps, and that WhatsApp group you keep forgetting to check.
 
-It fuses **local AI reasoning** (DeepSeek R1 running on YOUR GPU), **agentic automation** (an AI that literally fills out event forms for you), and an **in-browser Postgres database** (zero backend needed) into a single, stunning cyberpunk interface.
+It fuses **local AI reasoning** (DeepSeek R1 running on GPU), **agentic automation** (an AI that literally fills out event forms for you), and an **in-browser Postgres database** (zero backend needed) into a single, stunning cyberpunk interface.
 
 ### 🎯 The Problem
 Students drown in fragmented tools. Hackathon links buried in WhatsApp. Notes scattered across apps. Event deadlines missed. Registration forms left half-filled at 2 AM.
