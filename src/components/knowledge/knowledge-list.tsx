@@ -32,7 +32,8 @@ export function KnowledgeList({ filter }: KnowledgeListProps) {
 
     useEffect(() => {
         loadItems();
-        const interval = setInterval(loadItems, 3000);
+        // Poll at a reasonable interval to avoid excessive re-renders
+        const interval = setInterval(loadItems, 15000);
         return () => clearInterval(interval);
     }, [db]);
 

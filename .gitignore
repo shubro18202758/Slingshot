@@ -54,3 +54,12 @@ tmpclaude-*
 dry_run_*.png
 test-event-*.json
 models*.txt
+
+# PGlite server database (binary data — never commit)
+nexus-server-db/
+
+# IDE / agent workspace
+.kiro/
+
+# Server logs
+server_log.txt

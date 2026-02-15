@@ -15,6 +15,28 @@ async function initCore() {
                 "created_at" timestamp DEFAULT now() NOT NULL
             );
 
+            CREATE TABLE IF NOT EXISTS "learning_profiles" (
+                "id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+                "student_id" uuid NOT NULL REFERENCES "students"("id") ON DELETE CASCADE,
+                "level" text,
+                "primary_domains" jsonb,
+                "secondary_domains" jsonb,
+                "weak_concepts" jsonb,
+                "strong_concepts" jsonb,
+                "learning_style" text,
+                "goal_type" text,
+                "confidence_score" integer,
+                "last_analyzed" timestamp DEFAULT now()
+            );
+
+            CREATE TABLE IF NOT EXISTS "learning_roadmaps" (
+                "id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+                "student_id" uuid NOT NULL REFERENCES "students"("id") ON DELETE CASCADE,
+                "domain" text NOT NULL,
+                "roadmap_data" jsonb NOT NULL,
+                "created_at" timestamp DEFAULT now() NOT NULL
+            );
+
             CREATE TABLE IF NOT EXISTS "students" (
                 "id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
                 "name" text NOT NULL,

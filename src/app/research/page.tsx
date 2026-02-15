@@ -1,393 +1,348 @@
 "use client";
 
-import { useState, useRef, useEffect } from "react";
-import { useRouter } from "next/navigation";
+import { useState, useEffect, useCallback } from "react";
+import { ResearchPanel } from "@/components/research/research-panel";
 import { useDb } from "@/components/providers/db-provider";
-import { useRag } from "@/hooks/use-rag";
-import { documents } from "@/db/schema";
-import { LLMEngine } from "@/lib/ai/llm-engine";
-import {
-    parseJsonArray,
-    buildQueryExpansionPrompt,
-    buildResearchDecompositionPrompt,
-} from "@/lib/ai/agent";
-import {
-    Search, Loader2, FileText, Save, Copy,
-    Sparkles, BookOpen, ArrowRight, CheckCircle2
-} from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import { knowledgeItems, knowledgeChunks } from "@/db/schema";
+import { count, eq } from "drizzle-orm";
 import { Badge } from "@/components/ui/badge";
-import { Card, CardContent } from "@/components/ui/card";
-import { motion, AnimatePresence } from "framer-motion";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { Separator } from "@/components/ui/separator";
+import {
+    Search,
+    Database,
+    FileText,
+    Layers,
+    Clock,
+    Trash2,
+    BookOpen,
+    Sparkles,
+    AlertCircle,
+    Brain,
+    ArrowRight,
+} from "lucide-react";
 import { cn } from "@/lib/utils";
+import { motion, AnimatePresence } from "framer-motion";
+import type { ResearchBrief, CitationDetail } from "@/types/research";
 
-type ResearchStep = {
-    id: number;
-    label: string;
-    status: "pending" | "running" | "done" | "error";
-    detail?: string;
-};
+// ============================================================
+// Research History — localStorage-backed
+// ============================================================
+const RESEARCH_HISTORY_KEY = "slingshot-research-history";
 
-type Citation = {
-    index: number;
-    content: string;
-    similarity: number;
-};
+interface ResearchHistoryEntry {
+    id: string;
+    query: string;
+    title: string;
+    summary: string;
+    findingsCount: number;
+    sourcesCount: number;
+    confidence: number;
+    timestamp: number;
+}
 
+function getResearchHistory(): ResearchHistoryEntry[] {
+    try {
+        const raw = localStorage.getItem(RESEARCH_HISTORY_KEY);
+        if (!raw) return [];
+        return JSON.parse(raw) as ResearchHistoryEntry[];
+    } catch {
+        return [];
+    }
+}
+
+function saveResearchHistory(entries: ResearchHistoryEntry[]) {
+    try {
+        localStorage.setItem(RESEARCH_HISTORY_KEY, JSON.stringify(entries.slice(0, 50)));
+    } catch { /* quota */ }
+}
+
+/**
+ * /research — Research Copilot Page.
+ * Full-width layout with knowledge base stats, research history,
+ * and the Research Panel for running AI-powered deep research.
+ */
 export default function ResearchPage() {
-    const router = useRouter();
-    const { db } = useDb();
-    const { searchWithRerank } = useRag();
-    const [topic, setTopic] = useState("");
-    const [isResearching, setIsResearching] = useState(false);
-    const [steps, setSteps] = useState<ResearchStep[]>([]);
-    const [briefing, setBriefing] = useState<string | null>(null);
-    const [citations, setCitations] = useState<Citation[]>([]);
-    const [isSaving, setIsSaving] = useState(false);
-    const [saved, setSaved] = useState(false);
-    const outputRef = useRef<HTMLDivElement>(null);
+    const { db, workspaceId } = useDb();
 
-    const updateStep = (id: number, updates: Partial<ResearchStep>) => {
-        setSteps((prev) => prev.map((s) => (s.id === id ? { ...s, ...updates } : s)));
-    };
+    // Knowledge base stats
+    const [docCount, setDocCount] = useState<number>(0);
+    const [chunkCount, setChunkCount] = useState<number>(0);
+    const [statsLoaded, setStatsLoaded] = useState(false);
 
-    const startResearch = async () => {
-        if (!topic.trim()) return;
-        setIsResearching(true);
-        setBriefing(null);
-        setCitations([]);
-        setSaved(false);
+    // Research history
+    const [history, setHistory] = useState<ResearchHistoryEntry[]>([]);
 
-        const researchSteps: ResearchStep[] = [
-            { id: 1, label: "Decomposing topic into sub-questions", status: "pending" },
-            { id: 2, label: "Expanding queries for comprehensive coverage", status: "pending" },
-            { id: 3, label: "Searching knowledge base with re-ranking", status: "pending" },
-            { id: 4, label: "Compiling research brief with citations", status: "pending" },
-        ];
-        setSteps(researchSteps);
+    // Panel visibility on mobile
+    const [showPanel, setShowPanel] = useState(true);
 
-        try {
-            // Step 1: Decompose into sub-questions
-            updateStep(1, { status: "running" });
-            const llm = LLMEngine.getInstance();
-
-            if (!llm.isReady()) {
-                updateStep(1, { detail: "Initializing AI Model (First Run)..." });
-                await llm.initialize((progress) => {
-                    console.log("Initializing LLM:", progress);
-                    if (progress.text.includes("%")) {
-                        updateStep(1, { detail: `Loading AI Model: ${progress.text}` });
-                    }
-                });
-            }
-
-            const decompositionPrompt = buildResearchDecompositionPrompt(topic, 3);
-            let subQuestions: string[] = [];
+    // Load knowledge base stats
+    useEffect(() => {
+        if (!db) return;
+        (async () => {
             try {
-                const response = await llm.chat([
-                    { role: "system", content: "You are a research assistant. Respond ONLY with a JSON array of sub-questions." },
-                    { role: "user", content: decompositionPrompt },
-                ]);
-                subQuestions = parseJsonArray(response);
-            } catch {
-                subQuestions = [topic];
+                const [docs] = await db.select({ value: count() }).from(knowledgeItems).where(eq(knowledgeItems.workspaceId, workspaceId));
+                // Join through knowledgeItems to count only chunks belonging to this workspace
+                const [chunks] = await db
+                    .select({ value: count() })
+                    .from(knowledgeChunks)
+                    .innerJoin(knowledgeItems, eq(knowledgeChunks.knowledgeItemId, knowledgeItems.id))
+                    .where(eq(knowledgeItems.workspaceId, workspaceId));
+                setDocCount(docs?.value ?? 0);
+                setChunkCount(chunks?.value ?? 0);
+            } catch (e) {
+                console.error("Failed to load KB stats:", e);
+            } finally {
+                setStatsLoaded(true);
             }
-            if (subQuestions.length === 0) subQuestions = [topic];
-            updateStep(1, { status: "done", detail: `Generated ${subQuestions.length} sub-questions` });
+        })();
+    }, [db, workspaceId]);
 
-            // Step 2: Expand queries
-            updateStep(2, { status: "running" });
-            const allQueries: string[] = [];
-            for (const q of subQuestions) {
-                allQueries.push(q);
-                try {
-                    const expansionPrompt = buildQueryExpansionPrompt(q);
-                    const response = await llm.chat([
-                        { role: "system", content: "You are a helpful assistant that generates search queries. Respond ONLY with a JSON array." },
-                        { role: "user", content: expansionPrompt },
-                    ]);
-                    const expanded = parseJsonArray(response);
-                    allQueries.push(...expanded.slice(0, 2));
-                } catch { /* Silent */ }
-            }
-            updateStep(2, { status: "done", detail: `${allQueries.length} search queries prepared` });
+    // Load research history
+    useEffect(() => {
+        setHistory(getResearchHistory());
+    }, []);
 
-            // Step 3: Search & re-rank
-            updateStep(3, { status: "running" });
-            const allResults: any[] = [];
-            const seen = new Set<string>();
+    // Listen for new research completions (custom event from ResearchPanel)
+    const handleResearchComplete = useCallback((brief: ResearchBrief, query: string) => {
+        const entry: ResearchHistoryEntry = {
+            id: crypto.randomUUID(),
+            query,
+            title: brief.title,
+            summary: brief.summary.substring(0, 200),
+            findingsCount: brief.key_findings.length,
+            sourcesCount: brief.annotated_bibliography.length,
+            confidence: brief.confidence_score,
+            timestamp: Date.now(),
+        };
+        setHistory((prev) => {
+            const next = [entry, ...prev].slice(0, 50);
+            saveResearchHistory(next);
+            return next;
+        });
+    }, []);
 
-            for (const query of allQueries) {
-                try {
-                    const results = await searchWithRerank(query);
-                    for (const r of results) {
-                        const key = r.content.substring(0, 80);
-                        if (!seen.has(key)) {
-                            seen.add(key);
-                            allResults.push(r);
-                        }
-                    }
-                } catch { /* Continue */ }
-            }
-
-            allResults.sort((a, b) => (b.rerank_score ?? b.similarity) - (a.rerank_score ?? a.similarity));
-            const topResults = allResults.slice(0, 10);
-
-            const citationList: Citation[] = topResults.map((r, i) => ({
-                index: i + 1,
-                content: r.content,
-                similarity: r.rerank_score ?? r.similarity,
-            }));
-            setCitations(citationList);
-            updateStep(3, { status: "done", detail: `Found ${topResults.length} high-relevance sources` });
-
-            // Step 4: Compile with LLM
-            updateStep(4, { status: "running" });
-            const sourcesBlock = citationList
-                .map((c) => `[${c.index}] ${c.content}`)
-                .join("\n\n");
-
-            const compilationPrompt = `You are a research assistant. Using ONLY the provided sources, write a well-structured research brief on: "${topic}"
-
-SOURCES:
-${sourcesBlock || "No sources found."}
-
-INSTRUCTIONS:
-- Write 3-5 paragraphs covering the key findings.
-- Cite sources using [1], [2], etc. inline when referencing specific facts.
-- If no sources are available, write a brief general overview and note the lack of evidence.
-- Use markdown formatting (headers, bold, lists).
-- End with a "## Key Takeaways" section with 3-4 bullet points.`;
-
-            const brief = await llm.chat([
-                { role: "system", content: "You are an expert research writer. Always cite sources." },
-                { role: "user", content: compilationPrompt },
-            ]);
-
-            setBriefing(brief);
-            updateStep(4, { status: "done", detail: "Research brief compiled" });
-        } catch (error) {
-            console.error("Research failed:", error);
-            const failedStep = steps.find((s) => s.status === "running");
-            if (failedStep) updateStep(failedStep.id, { status: "error", detail: String(error) });
-        } finally {
-            setIsResearching(false);
-        }
+    const clearHistory = () => {
+        setHistory([]);
+        localStorage.removeItem(RESEARCH_HISTORY_KEY);
     };
 
-    const handleSaveAsDocument = async () => {
-        if (!db || !briefing) return;
-        setIsSaving(true);
-        try {
-            await db.insert(documents).values({
-                workspaceId: "default",
-                title: `Research: ${topic}`,
-                content: briefing,
-            });
-            setSaved(true);
-        } catch (e) {
-            console.error("Failed to save:", e);
-        } finally {
-            setIsSaving(false);
-        }
+    const confidenceColor = (score: number) => {
+        if (score >= 0.7) return "text-emerald-400 border-emerald-500/30 bg-emerald-500/10";
+        if (score >= 0.4) return "text-amber-400 border-amber-500/30 bg-amber-500/10";
+        return "text-red-400 border-red-500/30 bg-red-500/10";
     };
 
-    const handleCopy = () => {
-        if (briefing) {
-            navigator.clipboard.writeText(briefing);
-        }
+    const timeAgo = (ts: number) => {
+        const diff = Date.now() - ts;
+        const mins = Math.floor(diff / 60000);
+        if (mins < 1) return "just now";
+        if (mins < 60) return `${mins}m ago`;
+        const hrs = Math.floor(mins / 60);
+        if (hrs < 24) return `${hrs}h ago`;
+        const days = Math.floor(hrs / 24);
+        return `${days}d ago`;
     };
 
     return (
-        <div className="flex flex-col min-h-screen p-6 md:p-8">
-            <div className="max-w-4xl mx-auto w-full space-y-8">
+        <div className="flex h-full">
+            {/* ===== Left: Main Content Area ===== */}
+            <div className="flex-1 overflow-y-auto p-6 md:p-8 space-y-6 max-w-3xl">
                 {/* Header */}
                 <div className="flex items-center gap-4">
                     <div className="bg-gradient-to-br from-cyan-500/20 to-blue-500/20 p-3 rounded-xl border border-cyan-500/10">
                         <Search className="h-6 w-6 text-cyan-400" />
                     </div>
                     <div>
-                        <h1 className="text-3xl font-bold tracking-tight bg-gradient-to-r from-cyan-400 via-blue-400 to-violet-400 bg-clip-text text-transparent">
+                        <h1 className="text-3xl font-bold tracking-tight bg-gradient-to-r from-cyan-400 via-blue-400 to-indigo-400 bg-clip-text text-transparent">
                             Research Copilot
                         </h1>
-                        <p className="text-muted-foreground">
-                            AI-powered deep research with citations from your knowledge base.
+                        <p className="text-muted-foreground mt-1">
+                            AI-powered deep research with citations over your knowledge base.
                         </p>
                     </div>
                 </div>
 
-                {/* Topic Input */}
-                <Card className="border-white/10 bg-white/5 backdrop-blur-sm">
-                    <CardContent className="p-5">
-                        <div className="flex gap-3">
-                            <Input
-                                value={topic}
-                                onChange={(e) => setTopic(e.target.value)}
-                                placeholder="Enter a research topic... (e.g., 'Impact of transformer architecture on NLP')"
-                                className="bg-white/5 border-white/10 focus:border-cyan-500/50 text-base"
-                                onKeyDown={(e) => e.key === "Enter" && startResearch()}
-                                disabled={isResearching}
-                            />
-                            <Button
-                                onClick={startResearch}
-                                disabled={isResearching || !topic.trim()}
-                                className="bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white gap-2 px-6"
+                {/* Knowledge Base Stats */}
+                <div className="grid grid-cols-3 gap-3">
+                    <Card className="bg-white/[0.02] border-white/10">
+                        <CardContent className="p-4 flex items-center gap-3">
+                            <div className="p-2 rounded-lg bg-cyan-500/10 border border-cyan-500/15">
+                                <FileText className="h-4 w-4 text-cyan-400" />
+                            </div>
+                            <div>
+                                <p className="text-2xl font-bold text-foreground">
+                                    {statsLoaded ? docCount : "—"}
+                                </p>
+                                <p className="text-[10px] text-muted-foreground uppercase tracking-wide">
+                                    Documents
+                                </p>
+                            </div>
+                        </CardContent>
+                    </Card>
+                    <Card className="bg-white/[0.02] border-white/10">
+                        <CardContent className="p-4 flex items-center gap-3">
+                            <div className="p-2 rounded-lg bg-violet-500/10 border border-violet-500/15">
+                                <Layers className="h-4 w-4 text-violet-400" />
+                            </div>
+                            <div>
+                                <p className="text-2xl font-bold text-foreground">
+                                    {statsLoaded ? chunkCount : "—"}
+                                </p>
+                                <p className="text-[10px] text-muted-foreground uppercase tracking-wide">
+                                    Vector Chunks
+                                </p>
+                            </div>
+                        </CardContent>
+                    </Card>
+                    <Card className="bg-white/[0.02] border-white/10">
+                        <CardContent className="p-4 flex items-center gap-3">
+                            <div className="p-2 rounded-lg bg-amber-500/10 border border-amber-500/15">
+                                <Brain className="h-4 w-4 text-amber-400" />
+                            </div>
+                            <div>
+                                <p className="text-2xl font-bold text-foreground">
+                                    {history.length}
+                                </p>
+                                <p className="text-[10px] text-muted-foreground uppercase tracking-wide">
+                                    Researches
+                                </p>
+                            </div>
+                        </CardContent>
+                    </Card>
+                </div>
+
+                {/* Empty state — guide user when no docs exist */}
+                {statsLoaded && docCount === 0 && (
+                    <Card className="bg-amber-500/5 border-amber-500/20">
+                        <CardContent className="p-5 flex items-start gap-3">
+                            <AlertCircle className="h-5 w-5 text-amber-400 shrink-0 mt-0.5" />
+                            <div className="space-y-1">
+                                <p className="text-sm font-medium text-amber-300">No documents indexed yet</p>
+                                <p className="text-xs text-muted-foreground">
+                                    The Research Copilot searches your personal knowledge base. Upload documents in the{" "}
+                                    <a href="/knowledge" className="text-cyan-400 hover:underline">Knowledge</a> section first,
+                                    then come back here to research across them.
+                                </p>
+                            </div>
+                        </CardContent>
+                    </Card>
+                )}
+
+                {/* How It Works */}
+                <div>
+                    <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide mb-3 flex items-center gap-2">
+                        <Sparkles className="h-3.5 w-3.5 text-cyan-400" />
+                        How It Works
+                    </h2>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        {[
+                            { step: "1", title: "Topic Decomposition", desc: "Breaks your query into focused sub-questions for deeper coverage", icon: Search },
+                            { step: "2", title: "Query Expansion", desc: "Generates synonyms and related terms to maximize retrieval recall", icon: Layers },
+                            { step: "3", title: "Vector Search + Rerank", desc: "Searches your knowledge base with embeddings, then cross-encoder reranks", icon: Database },
+                            { step: "4", title: "Research Brief", desc: "Compiles findings with inline citations, confidence scores, and tasks", icon: BookOpen },
+                        ].map((item) => (
+                            <div
+                                key={item.step}
+                                className="flex items-start gap-3 p-3 rounded-lg bg-white/[0.02] border border-white/10"
                             >
-                                {isResearching ? (
-                                    <Loader2 className="h-4 w-4 animate-spin" />
-                                ) : (
-                                    <Sparkles className="h-4 w-4" />
-                                )}
-                                Research
-                            </Button>
-                        </div>
-                    </CardContent>
-                </Card>
-
-                {/* Research Progress */}
-                <AnimatePresence>
-                    {steps.length > 0 && (
-                        <motion.div
-                            initial={{ opacity: 0, y: 10 }}
-                            animate={{ opacity: 1, y: 0 }}
-                            className="space-y-2"
-                        >
-                            {steps.map((step) => (
-                                <motion.div
-                                    key={step.id}
-                                    initial={{ opacity: 0, x: -10 }}
-                                    animate={{ opacity: 1, x: 0 }}
-                                    transition={{ delay: step.id * 0.05 }}
-                                    className={cn(
-                                        "flex items-center gap-3 p-3 rounded-lg border transition-all",
-                                        step.status === "running" && "border-cyan-500/30 bg-cyan-500/5",
-                                        step.status === "done" && "border-emerald-500/20 bg-emerald-500/5",
-                                        step.status === "error" && "border-red-500/20 bg-red-500/5",
-                                        step.status === "pending" && "border-white/10 bg-white/5 opacity-50"
-                                    )}
-                                >
-                                    {step.status === "running" && <Loader2 className="h-4 w-4 animate-spin text-cyan-400 shrink-0" />}
-                                    {step.status === "done" && <CheckCircle2 className="h-4 w-4 text-emerald-400 shrink-0" />}
-                                    {step.status === "error" && <div className="h-4 w-4 rounded-full bg-red-500 shrink-0" />}
-                                    {step.status === "pending" && <div className="h-4 w-4 rounded-full border-2 border-white/20 shrink-0" />}
-                                    <div className="flex-1">
-                                        <p className="text-sm font-medium">{step.label}</p>
-                                        {step.detail && <p className="text-[10px] text-muted-foreground">{step.detail}</p>}
-                                    </div>
-                                </motion.div>
-                            ))}
-                        </motion.div>
-                    )}
-                </AnimatePresence>
-
-                {/* Research Output */}
-                {briefing && (
-                    <motion.div
-                        initial={{ opacity: 0, y: 10 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        className="space-y-4"
-                    >
-                        <Card className="border-white/10 bg-white/5 backdrop-blur-sm">
-                            <div className="px-5 py-3 border-b border-white/5 flex items-center justify-between">
-                                <div className="flex items-center gap-2">
-                                    <BookOpen className="h-4 w-4 text-cyan-400" />
-                                    <h3 className="font-semibold text-sm">Research Brief</h3>
-                                    {citations.length > 0 && (
-                                        <Badge variant="outline" className="border-cyan-500/30 text-cyan-400 text-[10px]">
-                                            {citations.length} citations
-                                        </Badge>
-                                    )}
+                                <div className="flex items-center justify-center h-6 w-6 rounded-md bg-cyan-500/15 border border-cyan-500/20 text-[10px] font-bold text-cyan-400 shrink-0">
+                                    {item.step}
                                 </div>
-                                <div className="flex items-center gap-2">
-                                    <Button variant="ghost" size="sm" className="h-8 text-xs gap-1" onClick={handleCopy}>
-                                        <Copy className="h-3 w-3" /> Copy
-                                    </Button>
-                                    <Button
-                                        variant="ghost"
-                                        size="sm"
-                                        className="h-8 text-xs gap-1 text-cyan-300"
-                                        onClick={handleSaveAsDocument}
-                                        disabled={isSaving || saved}
-                                    >
-                                        {saved ? (
-                                            <><CheckCircle2 className="h-3 w-3 text-emerald-400" /> Saved</>
-                                        ) : isSaving ? (
-                                            <><Loader2 className="h-3 w-3 animate-spin" /> Saving...</>
-                                        ) : (
-                                            <><Save className="h-3 w-3" /> Save as Document</>
-                                        )}
-                                    </Button>
+                                <div>
+                                    <p className="text-xs font-medium text-foreground/90">{item.title}</p>
+                                    <p className="text-[10px] text-muted-foreground mt-0.5">{item.desc}</p>
                                 </div>
                             </div>
-                            <CardContent className="p-6" ref={outputRef}>
-                                <div className="prose prose-sm dark:prose-invert max-w-none prose-headings:text-foreground/90 prose-p:text-muted-foreground prose-strong:text-foreground/80 prose-li:text-muted-foreground">
-                                    {briefing.split("\n").map((line, i) => {
-                                        if (line.startsWith("## ")) {
-                                            return <h2 key={i} className="text-lg font-semibold mt-4 mb-2 text-cyan-300">{line.replace("## ", "")}</h2>;
-                                        }
-                                        if (line.startsWith("### ")) {
-                                            return <h3 key={i} className="text-base font-medium mt-3 mb-1">{line.replace("### ", "")}</h3>;
-                                        }
-                                        if (line.startsWith("- ")) {
-                                            return (
-                                                <div key={i} className="flex items-start gap-2 ml-2 my-1">
-                                                    <ArrowRight className="h-3 w-3 text-cyan-400 mt-1 shrink-0" />
-                                                    <span className="text-sm text-muted-foreground">{renderCitations(line.replace("- ", ""))}</span>
-                                                </div>
-                                            );
-                                        }
-                                        if (line.trim() === "") return <div key={i} className="h-2" />;
-                                        return <p key={i} className="text-sm leading-relaxed mb-2">{renderCitations(line)}</p>;
-                                    })}
-                                </div>
-                            </CardContent>
-                        </Card>
+                        ))}
+                    </div>
+                </div>
 
-                        {/* Citations Panel */}
-                        {citations.length > 0 && (
-                            <Card className="border-white/10 bg-white/5 backdrop-blur-sm">
-                                <div className="px-5 py-3 border-b border-white/5">
-                                    <h3 className="font-semibold text-sm flex items-center gap-2">
-                                        <FileText className="h-4 w-4 text-amber-400" /> Sources
-                                    </h3>
-                                </div>
-                                <CardContent className="p-4 space-y-2">
-                                    {citations.map((c) => (
-                                        <div key={c.index} className="flex gap-3 p-2.5 rounded-lg bg-white/5 border border-white/10">
-                                            <Badge variant="outline" className="shrink-0 h-5 text-[10px] border-amber-500/30 text-amber-400 mt-0.5">
-                                                {c.index}
-                                            </Badge>
-                                            <div className="flex-1 min-w-0">
-                                                <p className="text-xs text-muted-foreground line-clamp-2">{c.content}</p>
-                                                <p className="text-[10px] text-muted-foreground/50 mt-0.5">
-                                                    Confidence: {(c.similarity * 100).toFixed(0)}%
-                                                </p>
-                                            </div>
-                                        </div>
-                                    ))}
-                                </CardContent>
-                            </Card>
+                <Separator className="bg-white/5" />
+
+                {/* Research History */}
+                <div>
+                    <div className="flex items-center justify-between mb-3">
+                        <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide flex items-center gap-2">
+                            <Clock className="h-3.5 w-3.5 text-cyan-400" />
+                            Research History
+                        </h2>
+                        {history.length > 0 && (
+                            <Button
+                                variant="ghost"
+                                size="sm"
+                                className="h-7 text-[10px] text-muted-foreground hover:text-red-400 gap-1"
+                                onClick={clearHistory}
+                            >
+                                <Trash2 className="h-3 w-3" />
+                                Clear
+                            </Button>
                         )}
-                    </motion.div>
-                )}
+                    </div>
+
+                    {history.length === 0 ? (
+                        <div className="flex flex-col items-center justify-center py-12 text-center">
+                            <div className="p-4 rounded-full bg-white/5 border border-white/10 mb-4">
+                                <Search className="h-8 w-8 text-muted-foreground/30" />
+                            </div>
+                            <p className="text-sm text-muted-foreground/60">No research sessions yet</p>
+                            <p className="text-xs text-muted-foreground/40 mt-1">
+                                Use the Research Panel on the right to start your first query
+                            </p>
+                            <ArrowRight className="h-4 w-4 text-muted-foreground/20 mt-3 animate-pulse" />
+                        </div>
+                    ) : (
+                        <div className="space-y-2">
+                            <AnimatePresence>
+                                {history.map((entry) => (
+                                    <motion.div
+                                        key={entry.id}
+                                        initial={{ opacity: 0, y: 4 }}
+                                        animate={{ opacity: 1, y: 0 }}
+                                        exit={{ opacity: 0, y: -4 }}
+                                        className="p-3 rounded-lg bg-white/[0.02] border border-white/10 hover:bg-white/[0.04] transition-colors"
+                                    >
+                                        <div className="flex items-start justify-between gap-3">
+                                            <div className="flex-1 min-w-0">
+                                                <p className="text-sm font-medium text-foreground/90 truncate">
+                                                    {entry.title}
+                                                </p>
+                                                <p className="text-[10px] text-muted-foreground/60 mt-0.5 line-clamp-2">
+                                                    {entry.summary}
+                                                </p>
+                                                <div className="flex items-center gap-2 mt-2">
+                                                    <Badge variant="outline" className="text-[10px] border-white/10">
+                                                        {entry.findingsCount} findings
+                                                    </Badge>
+                                                    <Badge variant="outline" className="text-[10px] border-white/10">
+                                                        {entry.sourcesCount} sources
+                                                    </Badge>
+                                                    <Badge
+                                                        variant="outline"
+                                                        className={cn("text-[10px]", confidenceColor(entry.confidence))}
+                                                    >
+                                                        {(entry.confidence * 100).toFixed(0)}%
+                                                    </Badge>
+                                                </div>
+                                            </div>
+                                            <span className="text-[10px] text-muted-foreground/40 shrink-0">
+                                                {timeAgo(entry.timestamp)}
+                                            </span>
+                                        </div>
+                                    </motion.div>
+                                ))}
+                            </AnimatePresence>
+                        </div>
+                    )}
+                </div>
             </div>
+
+            {/* ===== Right: Research Panel ===== */}
+            <aside className="w-[520px] max-w-full border-l border-white/10 bg-background/95 backdrop-blur-md flex flex-col h-screen sticky top-0">
+                <ResearchPanel onResearchComplete={handleResearchComplete} />
+            </aside>
         </div>
     );
-}
-
-function renderCitations(text: string): React.ReactNode {
-    // Highlight [1], [2], etc as interactive badges
-    const parts = text.split(/(\[\d+\])/g);
-    return parts.map((part, i) => {
-        const match = part.match(/^\[(\d+)\]$/);
-        if (match) {
-            return (
-                <span key={i} className="inline-flex items-center mx-0.5 px-1 py-0 text-[10px] font-mono rounded bg-cyan-500/15 text-cyan-400 border border-cyan-500/20">
-                    {part}
-                </span>
-            );
-        }
-        return <span key={i}>{part}</span>;
-    });
 }

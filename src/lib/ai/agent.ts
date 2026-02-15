@@ -161,3 +161,76 @@ export function parseJsonArray(content: string): string[] {
         return [];
     }
 }
+
+// ============================================================
+// Research Copilot — Strict JSON Prompts (Spec §1, §3)
+// ============================================================
+
+/**
+ * System prompt that forces DeepSeek R1 to return ONLY valid JSON
+ * matching the ResearchBrief schema.
+ */
+export const RESEARCH_COPILOT_SYSTEM_PROMPT = `You are a research assistant engine. You MUST respond ONLY with a single valid JSON object.
+
+STRICT RULES:
+1. Output ONLY JSON — no markdown, no explanation, no extra text.
+2. Every claim MUST cite a source from the provided evidence using its [index].
+3. If a claim has no supporting evidence, set the source field to "UNVERIFIED".
+4. Do not hallucinate facts. Stick strictly to the provided sources.
+
+The JSON MUST follow this exact schema:
+{
+  "title": "string — a concise research title",
+  "summary": "string — 2-4 sentence executive summary",
+  "key_findings": [
+    { "point": "string — one distilled insight", "source": "string — e.g. [1] or UNVERIFIED" }
+  ],
+  "evidence": [
+    { "source_id": "string — knowledge_item UUID", "quote": "string — verbatim or paraphrased excerpt", "similarity": 0.0 }
+  ],
+  "annotated_bibliography": [
+    { "label": "string — e.g. [1]", "title": "string — source title", "source_id": "string — UUID", "score": 0.0 }
+  ],
+  "tasks": [
+    { "title": "string — actionable follow-up task", "priority": "low|medium|high" }
+  ],
+  "confidence_score": 0.0
+}
+
+Return ONLY this JSON object. Nothing else.`;
+
+/**
+ * Build the user prompt for the research compilation step.
+ * Receives the topic and the formatted source block from the RAG pipeline.
+ */
+export function buildResearchCompilationPrompt(
+    topic: string,
+    sourcesBlock: string,
+    confidenceScore: number
+): string {
+    return `Research topic: "${topic}"
+
+SOURCES (ordered by relevance):
+${sourcesBlock || "No sources found — mark all findings as UNVERIFIED."}
+
+Pre-computed confidence_score: ${confidenceScore.toFixed(3)}
+
+Using ONLY the above sources, produce the JSON research brief. Include 3-6 key findings, the evidence array mirroring the sources, an annotated bibliography, and 1-3 actionable follow-up tasks. Set confidence_score to ${confidenceScore.toFixed(3)}.`;
+}
+
+/**
+ * Build the user prompt to generate flashcards from a research brief.
+ */
+export function buildFlashcardPrompt(briefJson: string): string {
+    return `Given this research brief JSON, generate study flashcards.
+
+RESEARCH BRIEF:
+${briefJson}
+
+Produce a JSON array of flashcard objects. Each flashcard MUST have:
+- "question": a clear study question
+- "answer": a concise answer grounded in the research findings
+- "citation": the source label (e.g. "[1]") that supports the answer
+
+Return ONLY a JSON array: [{ "question": "", "answer": "", "citation": "" }, ...]`;
+}

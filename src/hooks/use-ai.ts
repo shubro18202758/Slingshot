@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef } from "react";
 import { LLMEngine } from "@/lib/ai/llm-engine";
-import { type InitProgressReport } from "@mlc-ai/web-llm";
+import { type InitProgressReport } from "@/lib/ai/llm-engine";
 
 export type Message = {
     role: "user" | "assistant" | "system";
@@ -62,9 +62,9 @@ export function useAi() {
                 await initialize();
             }
 
-            // Prepare context window - sending all messages for context
-            // In a real app, might want to limit context window
-            const context = [...messages, userMsg];
+            // Limit context window to last 20 messages to avoid exceeding context length
+            const allMessages = [...messages, userMsg];
+            const context = allMessages.length > 20 ? allMessages.slice(-20) : allMessages;
 
             const responseText = await engine.current.chat(context);
 
@@ -72,18 +72,16 @@ export function useAi() {
             setMessages((prev) => [...prev, aiMsg]);
 
         } catch (err) {
-            setError((err as Error).message);
-            // Remove failed user message? Or keep it with error state? 
-            // For now, keeping it but showing error.
+            const errMsg = (err as Error).message;
+            setError(errMsg);
+            // Append an error-indicator assistant message so the user sees what failed
+            setMessages((prev) => [...prev, { role: "assistant", content: `⚠ Error: ${errMsg}` }]);
         } finally {
             setIsGenerating(false);
         }
     }, [messages, initialize]);
 
-    // Auto-unload logic (Optional/Advanced)
-    // For now, we'll implement a simple unload on unmount if configured.
-    // However, WebLLM caching recommends keeping it loaded if usage is frequent.
-    // We'll skip aggressive unloading for now to keep the experience snappy.
+    // Ollama keeps model resident (keep_alive=-1), no unload needed.
 
     return {
         isModelLoading,

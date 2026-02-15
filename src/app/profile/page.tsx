@@ -1,6 +1,8 @@
 "use client";
 
 import { ProfileForm } from "@/components/profile/profile-form";
+import { LearningDNACard } from "@/components/profile/learning-dna-card";
+import { RoadmapRenderer } from "@/components/knowledge/roadmap-renderer";
 import { UserCheck } from "lucide-react";
 
 export default function ProfilePage() {
@@ -20,7 +22,9 @@ export default function ProfilePage() {
                 </div>
             </header>
 
-            <div className="max-w-5xl mx-auto w-full">
+            <div className="max-w-5xl mx-auto w-full space-y-8">
+                <LearningDNACard />
+                <RoadmapRenderer />
                 <ProfileForm />
             </div>
         </div>

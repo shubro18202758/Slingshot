@@ -10,6 +10,7 @@ import { EventCard } from "@/components/dashboard/event-card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { CalendarView } from "@/components/events/calendar-view";
 import { HistoryImporter } from "@/components/events/history-importer";
+import type { DateRange } from "react-day-picker";
 
 export default function EventsPage() {
     const [events, setEvents] = useState<any[]>([]);
@@ -17,6 +18,7 @@ export default function EventsPage() {
     const [selectedEvents, setSelectedEvents] = useState<Set<string>>(new Set());
     const [batchCommand, setBatchCommand] = useState("");
     const [isProcessing, setIsProcessing] = useState(false);
+    const [historyDateRange, setHistoryDateRange] = useState<DateRange | undefined>(undefined);
 
     const fetchEvents = async () => {
         try {
@@ -89,7 +91,7 @@ export default function EventsPage() {
 
                 <div className="flex flex-col items-end gap-2">
                     <div className="flex items-center gap-2">
-                        <HistoryImporter />
+                        <HistoryImporter date={historyDateRange} setDate={setHistoryDateRange} />
                         <div className="flex items-center gap-2 bg-green-500/10 px-3 py-1 rounded-full border border-green-500/20 h-10">
                             <span className="flex h-2 w-2 rounded-full bg-green-500 animate-pulse" />
                             <span className="text-xs text-green-400 font-mono font-bold">WHATSAPP CONNECTED</span>

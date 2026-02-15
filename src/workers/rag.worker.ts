@@ -68,10 +68,10 @@ self.onmessage = async (event: MessageEvent) => {
 
         } else if (type === "SEARCH") {
             const model = await getEmbedder();
-            const { query } = payload;
+            const { query, searchId } = payload;
             const output = await model(query, { pooling: "mean", normalize: true });
             const embedding = Array.from(output.data);
-            self.postMessage({ type: "SEARCH_GENERATED", payload: { query, embedding } });
+            self.postMessage({ type: "SEARCH_GENERATED", payload: { query, embedding, searchId } });
 
         } else if (type === "RERANK") {
             // Cross-Encoder re-ranking

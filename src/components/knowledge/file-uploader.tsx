@@ -46,16 +46,9 @@ export function FileUploader() {
         setIsProcessing(true);
         setUploadProgress(0);
 
-        // Fetch default workspace
-        // Ideally this should come from context or selection
-        const workspaceRes = await db.query.workspaces.findFirst();
-        const workspaceId = workspaceRes?.id;
-
-        if (!workspaceId) {
-            console.error("No workspace found. Please create one first.");
-            setIsProcessing(false);
-            return;
-        }
+        // Use the known default workspace ID from the DB provider context
+        const { DEFAULT_WORKSPACE_ID } = await import("@/components/providers/db-provider");
+        const workspaceId = DEFAULT_WORKSPACE_ID;
 
         for (let i = 0; i < files.length; i++) {
             const file = files[i];

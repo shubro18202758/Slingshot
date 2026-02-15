@@ -5,9 +5,13 @@ import { FileUploader } from "@/components/knowledge/file-uploader";
 import { KnowledgeList } from "@/components/knowledge/knowledge-list";
 import { KnowledgeGraph } from "@/components/knowledge/knowledge-graph";
 import { KnowledgeSearch } from "@/components/knowledge/knowledge-search";
+import { CopilotRunner } from "@/components/knowledge/copilot-runner";
+import { RoadmapRenderer } from "@/components/knowledge/roadmap-renderer";
+import { AdaptiveTimeline } from "@/components/knowledge/adaptive-timeline";
+import { type CopilotState } from "@/lib/ai/copilot-orchestrator";
 import { Separator } from "@/components/ui/separator";
 import { Button } from "@/components/ui/button";
-import { Brain, Sparkles, List, Network } from "lucide-react";
+import { Brain, Sparkles, List, Network, Zap, LayoutDashboard } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 type ViewMode = "list" | "graph";
@@ -15,6 +19,7 @@ type ViewMode = "list" | "graph";
 export default function KnowledgePage() {
     const [viewMode, setViewMode] = useState<ViewMode>("list");
     const [filter, setFilter] = useState({ query: "", category: "all" });
+    const [copilotState, setCopilotState] = useState<CopilotState | null>(null);
 
     return (
         <div className="flex flex-col h-full space-y-8 p-6 md:p-8 max-w-5xl mx-auto w-full">
@@ -25,10 +30,10 @@ export default function KnowledgePage() {
                     </div>
                     <div>
                         <h1 className="text-3xl font-bold tracking-tight bg-gradient-to-r from-violet-400 via-purple-400 to-fuchsia-400 bg-clip-text text-transparent">
-                            Knowledge Base
+                            Knowledge Copilot
                         </h1>
                         <p className="text-muted-foreground mt-1">
-                            Upload documents to create a &quot;Second Brain&quot; for your AI.
+                            Your self-optimizing cognitive mastery engine.
                         </p>
                     </div>
                 </div>
@@ -59,6 +64,23 @@ export default function KnowledgePage() {
                     </Button>
                 </div>
             </div>
+
+            <CopilotRunner onCycleComplete={setCopilotState} />
+
+            {/* Show 4-Week Adaptive Timeline after copilot cycle completes */}
+            {copilotState?.adaptiveRoadmap && (
+                <AdaptiveTimeline
+                    roadmap={copilotState.adaptiveRoadmap}
+                    copilotState={copilotState}
+                />
+            )}
+
+            <Separator className="bg-white/5" />
+
+            {/* §2 Concept Dependency Graph + §3 Cognitive Gap Analyzer */}
+            <RoadmapRenderer />
+
+            <Separator className="bg-white/5" />
 
             <FileUploader />
 

@@ -11,7 +11,7 @@ import {
     type AgentMessage,
 } from "@/lib/ai/agent";
 import { useDb } from "@/components/providers/db-provider";
-import { tasks } from "@/db/schema";
+import { createTaskInWorkspace } from "@/lib/task-utils";
 import { useRag } from "@/hooks/use-rag";
 
 export function useAgent(workspaceId: string = "default") {
@@ -38,7 +38,7 @@ export function useAgent(workspaceId: string = "default") {
             const response = await llm.chat([
                 { role: "system", content: "You are a helpful assistant that generates search queries. Respond ONLY with a JSON array." },
                 { role: "user", content: expansionPrompt },
-            ]);
+            ], { temperature: 0.3, max_tokens: 1024, json_mode: true });
             expandedQueries = parseJsonArray(response);
         } catch (e) {
             console.warn("Query expansion failed, falling back to original query:", e);
@@ -88,7 +88,7 @@ export function useAgent(workspaceId: string = "default") {
             const response = await llm.chat([
                 { role: "system", content: "You are a research assistant. Respond ONLY with a JSON array of sub-questions." },
                 { role: "user", content: decompositionPrompt },
-            ]);
+            ], { temperature: 0.2, max_tokens: 1024, json_mode: true });
             subQuestions = parseJsonArray(response);
         } catch (e) {
             console.warn("Research decomposition failed:", e);
@@ -134,15 +134,16 @@ export function useAgent(workspaceId: string = "default") {
         try {
             if (tool === "create_task") {
                 if (!db) return "Error: Database not connected.";
-                await db.insert(tasks).values({
+                const created = await createTaskInWorkspace(db, {
                     workspaceId,
                     title: params.title,
                     dueDate: params.due_date ? new Date(params.due_date) : null,
                     priority: params.priority || "medium",
                     description: params.description || null,
-                    status: "todo",
                 });
-                return `Task "${params.title}" created successfully.`;
+                return created
+                    ? `Task "${params.title}" created successfully.`
+                    : `Task "${params.title}" already exists — skipped.`;
             }
 
             if (tool === "search_knowledge_base") {
@@ -190,7 +191,7 @@ export function useAgent(workspaceId: string = "default") {
                 const summary = await llm.chat([
                     { role: "system", content: "Summarize the following document concisely. Use bullet points for key findings." },
                     { role: "user", content: truncated },
-                ]);
+                ], { temperature: 0.2, max_tokens: 4096 });
 
                 return `## Document Summary\n\n${summary}`;
             }
@@ -211,20 +212,20 @@ export function useAgent(workspaceId: string = "default") {
         try {
             let conversation = [...newHistory];
             let turns = 0;
-            const MAX_TURNS = 8; // Increased for deeper reasoning chains
+            const MAX_TURNS = 8;
 
             while (turns < MAX_TURNS) {
                 turns++;
 
-                const llmMessages = [
+                const llmMessages: Array<{ role: "system" | "user" | "assistant"; content: string }> = [
                     { role: "system", content: SYSTEM_PROMPT },
                     ...conversation.map(msg => ({
-                        role: msg.role === "tool" ? "system" : msg.role,
+                        role: (msg.role === "tool" ? "system" : msg.role) as "system" | "user" | "assistant",
                         content: msg.role === "tool" ? `Tool Output: ${msg.content}` : msg.content
                     }))
                 ];
 
-                const response = await LLMEngine.getInstance().chat(llmMessages as any);
+                const response = await LLMEngine.getInstance().chat(llmMessages, { temperature: 0.3, max_tokens: 4096 });
 
                 const toolCall = parseToolCall(response);
 

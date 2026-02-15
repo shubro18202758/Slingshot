@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useDb } from "@/components/providers/db-provider";
+import { DEFAULT_WORKSPACE_ID } from "@/components/providers/db-provider";
 import { knowledgeChunks } from "@/db/schema";
 import { eq } from "drizzle-orm";
 import { LLMEngine } from "@/lib/ai/llm-engine";
@@ -87,7 +88,7 @@ export function SummaryDialog({ isOpen, onClose, knowledgeItemId, title }: Summa
         setIsSaving(true);
         try {
             await db.insert(documents).values({
-                workspaceId: "default",
+                workspaceId: DEFAULT_WORKSPACE_ID,
                 title: `Summary: ${title}`,
                 content: summary,
             });

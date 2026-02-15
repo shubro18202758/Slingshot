@@ -84,16 +84,18 @@ export async function fillForm(url: string, context: FormContext = {}): Promise<
         }
 
         // 3. Construct Profile Context
+        // student is guaranteed set by the if-else chain above
+        const s = student!;
         let profileContext = `
-        Name: ${student.name}
-        Email: ${student.email}
-        Phone: ${student.phone}
-        Links: ${JSON.stringify(student.links)}
-        University: ${student.university}
-        Major: ${student.major}
-        GPA: ${student.gpa}
-        Student ID: ${student.studentId}
-        Bio/Transcript Summary: ${student.transcript ? student.transcript.substring(0, 500) + "..." : "N/A"}
+        Name: ${s.name}
+        Email: ${s.email}
+        Phone: ${s.phone}
+        Links: ${JSON.stringify(s.links)}
+        University: ${s.university}
+        Major: ${s.major}
+        GPA: ${s.gpa}
+        Student ID: ${s.studentId}
+        Bio/Transcript Summary: ${s.transcript ? s.transcript.substring(0, 500) + "..." : "N/A"}
         
         PROJECTS:
         ${studentProjects.map(p => `- ${p.title}: ${p.description} (Skills: ${p.skills})`).join("\n")}

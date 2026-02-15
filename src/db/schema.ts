@@ -102,7 +102,7 @@ export const knowledgeChunks = pgTable("knowledge_chunks", {
     .references(() => knowledgeItems.id, { onDelete: "cascade" })
     .notNull(),
   content: text("content").notNull(),
-  embedding: vector("embedding"),
+  embedding: vector384("embedding"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
@@ -231,3 +231,107 @@ export const opportunities = pgTable("opportunities", {
 
 export type Opportunity = InferSelectModel<typeof opportunities>;
 export type NewOpportunity = InferInsertModel<typeof opportunities>;
+
+// ==========================================
+// Knowledge Copilot Schema
+// ==========================================
+
+export const learningProfiles = pgTable("learning_profiles", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  studentId: uuid("student_id")
+    .references(() => students.id, { onDelete: "cascade" })
+    .notNull(),
+  level: text("level"), // Beginner, Intermediate, Advanced
+  primaryDomains: jsonb("primary_domains"), // string[]
+  secondaryDomains: jsonb("secondary_domains"), // string[]
+  weakConcepts: jsonb("weak_concepts"), // string[]
+  strongConcepts: jsonb("strong_concepts"), // string[]
+  learningStyle: text("learning_style"),
+  goalType: text("goal_type"),
+  confidenceScore: integer("confidence_score"), // Stored as 0-100 for simplicity
+  lastAnalyzed: timestamp("last_analyzed").defaultNow(),
+});
+
+export type LearningProfile = InferSelectModel<typeof learningProfiles>;
+export type NewLearningProfile = InferInsertModel<typeof learningProfiles>;
+
+// ==========================================
+// Knowledge Graph Roadmap Schema
+// ==========================================
+
+export const learningRoadmaps = pgTable("learning_roadmaps", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  studentId: uuid("student_id")
+    .references(() => students.id, { onDelete: "cascade" })
+    .notNull(),
+  domain: text("domain").notNull(),
+  roadmapData: jsonb("roadmap_data").notNull(), // Stores the full JSON graph structure
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export type LearningRoadmap = InferSelectModel<typeof learningRoadmaps>;
+export type NewLearningRoadmap = InferInsertModel<typeof learningRoadmaps>;
+
+// ==========================================
+// Copilot Cycle Results Schema
+// ==========================================
+
+export const copilotCycles = pgTable("copilot_cycles", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  studentId: uuid("student_id")
+    .references(() => students.id, { onDelete: "cascade" })
+    .notNull(),
+  cycleNumber: integer("cycle_number").notNull(),
+  profileLevel: text("profile_level"),                   // Layer 1 result
+  bottlenecks: jsonb("bottlenecks"),                     // Layer 3 result (string[])
+  careerScore: integer("career_score"),                  // Layer 8 result
+  advancedUnlocked: text("advanced_unlocked"),           // Layer 10 result ("true"/"false")
+  tier: text("tier"),                                     // Layer 10 new_learning_tier
+  fullState: jsonb("full_state"),                         // Entire CopilotState snapshot
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export type CopilotCycle = InferSelectModel<typeof copilotCycles>;
+export type NewCopilotCycle = InferInsertModel<typeof copilotCycles>;
+
+// ==========================================
+// Career Evaluations Schema
+// ==========================================
+
+export const careerEvaluations = pgTable("career_evaluations", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  studentId: uuid("student_id")
+    .references(() => students.id, { onDelete: "cascade" })
+    .notNull(),
+  goalType: text("goal_type").notNull(),
+  competitionScore: integer("competition_score"),
+  internshipScore: integer("internship_score"),
+  weakestAreas: jsonb("weakest_areas"),                  // string[]
+  portfolioGaps: jsonb("portfolio_gaps"),                 // string[]
+  fullEvaluation: jsonb("full_evaluation"),               // FullCareerEvaluation JSON
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export type CareerEvaluation = InferSelectModel<typeof careerEvaluations>;
+export type NewCareerEvaluation = InferInsertModel<typeof careerEvaluations>;
+
+// ==========================================
+// Progress Reflections Schema
+// ==========================================
+
+export const progressReflections = pgTable("progress_reflections", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  studentId: uuid("student_id")
+    .references(() => students.id, { onDelete: "cascade" })
+    .notNull(),
+  roadmapId: uuid("roadmap_id"),
+  weekNumber: integer("week_number").notNull(),
+  reflection: text("reflection").notNull(),
+  difficultyAdjustment: text("difficulty_adjustment"),    // "increase"|"maintain"|"reduce"|"pivot"
+  updatedLevel: text("updated_level"),
+  fullEvaluation: jsonb("full_evaluation"),               // ProgressEvaluation JSON
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export type ProgressReflection = InferSelectModel<typeof progressReflections>;
+export type NewProgressReflection = InferInsertModel<typeof progressReflections>;

@@ -9,12 +9,7 @@ import { cn } from "@/lib/utils";
 import { format } from "date-fns";
 import { CalendarIcon, Loader2, DownloadCloud } from "lucide-react";
 import { toast } from "sonner";
-
-// We'll invoke the script via a server action (simulated via API for now or direct if safe)
-// For local dev, calling an API that spawns the process is better.
-// But wait, `import-whatsapp-history.ts` is a script.
-// We can't easily spawn a node process from Next.js middleware/edge, but in node runtime we can.
-// Let's create a server action wrapper.
+import { ingestHistory } from "@/app/actions/ingest-history";
 
 import { DateRange } from "react-day-picker";
 
