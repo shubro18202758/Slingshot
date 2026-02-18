@@ -335,3 +335,85 @@ export const progressReflections = pgTable("progress_reflections", {
 
 export type ProgressReflection = InferSelectModel<typeof progressReflections>;
 export type NewProgressReflection = InferInsertModel<typeof progressReflections>;
+
+// ==========================================
+// NEXUS — Club Intelligence Schema
+// ==========================================
+
+export const clubs = pgTable("clubs", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  iitId: text("iit_id").notNull(),
+  name: text("name").notNull(),
+  shortName: text("short_name"),
+  category: text("category").default("other"),
+  description: text("description"),
+  tagline: text("tagline"),
+  websiteUrl: text("website_url"),
+  instagramUrl: text("instagram_url"),
+  linkedinUrl: text("linkedin_url"),
+  githubUrl: text("github_url"),
+  email: text("email"),
+  logoUrl: text("logo_url"),
+  tags: jsonb("tags").default([]),
+  memberCount: integer("member_count"),
+  foundedYear: integer("founded_year"),
+  isRecruiting: text("is_recruiting").default("false"),
+  crawlStatus: text("crawl_status").default("pending"),
+  lastCrawledAt: timestamp("last_crawled_at"),
+  crawlSource: text("crawl_source"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+export const clubKnowledge = pgTable("club_knowledge", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  clubId: uuid("club_id").references(() => clubs.id, { onDelete: "cascade" }).notNull(),
+  knowledgeType: text("knowledge_type").notNull(),
+  title: text("title").notNull(),
+  content: text("content").notNull(),
+  sourceUrl: text("source_url"),
+  confidence: text("confidence").default("0.8"),
+  structuredData: jsonb("structured_data").default({}),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const clubEventAggregates = pgTable("club_event_aggregates", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  clubId: uuid("club_id").references(() => clubs.id, { onDelete: "cascade" }).notNull(),
+  title: text("title").notNull(),
+  description: text("description"),
+  eventType: text("event_type"),
+  startDate: text("start_date"),
+  registrationUrl: text("registration_url"),
+  isUpcoming: text("is_upcoming").default("true"),
+  prizePool: text("prize_pool"),
+  venue: text("venue"),
+  sourceUrl: text("source_url"),
+  rawText: text("raw_text"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const iitRegistry = pgTable("iit_registry", {
+  id: text("id").primaryKey(),
+  fullName: text("full_name").notNull(),
+  city: text("city").notNull(),
+  clubDirectoryUrl: text("club_directory_url"),
+  crawlStatus: text("crawl_status").default("pending"),
+  lastCrawledAt: timestamp("last_crawled_at"),
+});
+
+export const crawlLogs = pgTable("crawl_logs", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  iitId: text("iit_id"),
+  clubId: uuid("club_id"),
+  stage: text("stage"),
+  status: text("status").default("pending"),
+  message: text("message"),
+  itemsExtracted: integer("items_extracted").default(0),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export type Club = InferSelectModel<typeof clubs>;
+export type NewClub = InferInsertModel<typeof clubs>;
+export type ClubKnowledge = InferSelectModel<typeof clubKnowledge>;
+export type ClubEventAggregate = InferSelectModel<typeof clubEventAggregates>;
