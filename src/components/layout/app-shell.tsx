@@ -17,6 +17,7 @@ import {
   Users,
   Zap,
   LayoutDashboard,
+  Network,
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
@@ -64,6 +65,7 @@ const mainNav = [
   { name: "Tasks", href: "/tasks", icon: Layout },
   { name: "Command Center", href: "/command-center", icon: LayoutDashboard },
   { name: "Team", href: "/team", icon: Users }, // Keep Team as Users
+  { name: "Nexus", href: "/clubs", icon: Network },
   { name: "Settings", href: "/settings", icon: Settings },
 ];
 
