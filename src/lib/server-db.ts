@@ -55,6 +55,7 @@ if (!globalForDb.nexusTablesReady) {
       crawl_status TEXT DEFAULT 'pending',
       last_crawled_at TIMESTAMP,
       crawl_source TEXT,
+      UNIQUE(name, iit_id),
       created_at TIMESTAMP DEFAULT NOW(),
       updated_at TIMESTAMP DEFAULT NOW()
     );

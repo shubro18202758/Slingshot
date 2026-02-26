@@ -23,6 +23,7 @@ interface NexusCrawlPanelProps {
   onClose: () => void;
   onComplete: () => void;
   iitOptions: IITOption[];
+  homeIIT?: string | null;
 }
 
 const STAGE_LABELS: Record<string, string> = {
@@ -45,8 +46,8 @@ const STAGE_ICONS: Record<string, string> = {
   persist:   "💾",
 };
 
-export function NexusCrawlPanel({ onClose, onComplete, iitOptions }: NexusCrawlPanelProps) {
-  const [selectedIITs, setSelectedIITs] = useState<string[]>(["iitb"]);
+export function NexusCrawlPanel({ onClose, onComplete, iitOptions, homeIIT }: NexusCrawlPanelProps) {
+  const [selectedIITs, setSelectedIITs] = useState<string[]>(homeIIT ? [homeIIT] : ["iitb"]);
   const [selectedStages, setSelectedStages] = useState<string[]>(["discovery", "profile", "knowledge"]);
   const [maxClubs, setMaxClubs] = useState(15);
   const [preview, setPreview] = useState(false);
