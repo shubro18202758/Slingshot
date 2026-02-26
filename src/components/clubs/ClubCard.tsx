@@ -29,11 +29,12 @@ const IIT_SHORT: Record<string, string> = {
 interface ClubCardProps {
   club: Club;
   accentColor: string;
+  isHomeClub?: boolean;
   view: "grid" | "list";
   onClick: () => void;
 }
 
-export function ClubCard({ club, accentColor, view, onClick }: ClubCardProps) {
+export function ClubCard({ club, accentColor, view, onClick, isHomeClub }: ClubCardProps) {
   const icon = CATEGORY_ICONS[club.category ?? "other"] ?? "⬡";
   const iitLabel = IIT_SHORT[club.iitId ?? ""] ?? club.iitId?.toUpperCase();
   const tags = (club.tags ?? []).slice(0, 3);

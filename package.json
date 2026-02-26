@@ -63,6 +63,7 @@
     "@types/react-dom": "^19",
     "babel-plugin-react-compiler": "^1.0.0",
     "drizzle-kit": "^0.31.9",
+    "lightningcss-linux-x64-gnu": "^1.31.1",
     "shadcn": "^3.8.4",
     "tailwindcss": "^4",
     "tailwindcss-animate": "^1.0.7",
