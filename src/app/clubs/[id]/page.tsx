@@ -24,7 +24,7 @@ const IIT_COLORS: Record<string, string> = {
 export default function ClubDetailPage() {
   const params = useParams();
   const router = useRouter();
-  const id = params.id as string;
+  const { id } = params as { id: string };
 
   const [club, setClub] = useState<Record<string, unknown> | null>(null);
   const [knowledge, setKnowledge] = useState<Record<string, unknown>[]>([]);

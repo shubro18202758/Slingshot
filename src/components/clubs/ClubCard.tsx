@@ -187,6 +187,12 @@ export function ClubCard({ club, accentColor, view, onClick, isHomeClub }: ClubC
           {club.memberCount ? `${club.memberCount} members` : club.category}
         </span>
         <div className="flex items-center gap-2">
+          {club.websiteUrl {club.githubUrl && ({club.githubUrl && ( String(club.websiteUrl).startsWith("http") {club.githubUrl && ({club.githubUrl && ( (
+            <a href={String(club.websiteUrl)} target="_blank" rel="noopener noreferrer" onClick={(e) => e.stopPropagation()} className="text-[10px] font-mono text-gray-500 hover:text-white transition-colors px-1.5 py-0.5 rounded border border-[#30363d] hover:border-white/20">Web ↗</a>
+          )}
+          {club.instagramUrl && String(club.instagramUrl).startsWith("http") && (
+            <a href={String(club.instagramUrl)} target="_blank" rel="noopener noreferrer" onClick={(e) => e.stopPropagation()} className="text-[10px] font-mono text-pink-500/60 hover:text-pink-400 transition-colors px-1.5 py-0.5 rounded border border-pink-500/20 hover:border-pink-500/40">Insta ↗</a>
+          )}
           {club.githubUrl && (
             <a
               href={club.githubUrl}

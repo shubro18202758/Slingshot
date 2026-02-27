@@ -65,7 +65,7 @@ const mainNav = [
   { name: "Tasks", href: "/tasks", icon: Layout },
   { name: "Command Center", href: "/command-center", icon: LayoutDashboard },
   { name: "Team", href: "/team", icon: Users }, // Keep Team as Users
-  { name: "Nexus", href: "/clubs", icon: Network },
+  { name: "Clubs", href: "/clubs", icon: Network },
   { name: "Settings", href: "/settings", icon: Settings },
 ];
 

@@ -1,16 +1,13 @@
 /**
- * NEXUS Intelligence Agent — Groq-knowledge-first version
- * 
- * Strategy:
- *   Stage 1 — Groq seeds clubs from training knowledge (always works)
- *   Stage 2 — Fetch + Groq enriches profiles where URLs are accessible  
- *   Stage 3 — Groq extracts tacit knowledge
- *   Profile-aware — reads student.university to auto-load home IIT
+ * NEXUS Agent — Real data via Tavily search + Groq extraction
+ * Tavily searches the web for each club → Groq structures the real content
  */
 
 import Groq from "groq-sdk";
 import { IIT_SEED_REGISTRY, CATEGORY_KEYWORDS } from "./iit-registry";
 import type { IITId } from "./iit-registry";
+
+// ─── Types ────────────────────────────────────────────────────────────────────
 
 export interface ClubLink {
   name: string;
@@ -33,8 +30,6 @@ export interface ClubProfile {
   memberCount?: number;
   foundedYear?: number;
   isRecruiting: boolean;
-  recruitmentDeadline?: string;
-  logoUrl?: string;
 }
 
 export interface ClubKnowledgeItem {
@@ -93,15 +88,69 @@ export interface NexusCrawlOptions {
   stages?: ("discovery" | "profile" | "knowledge" | "embed")[];
 }
 
-function getGroqClient(): Groq {
-  const apiKey = process.env.GROQ_API_KEY;
-  if (!apiKey) throw new Error("GROQ_API_KEY not set");
-  return new Groq({ apiKey });
+// ─── Clients ──────────────────────────────────────────────────────────────────
+
+function getGroq(): Groq {
+  const key = process.env.GROQ_API_KEY;
+  if (!key) throw new Error("GROQ_API_KEY not set");
+  return new Groq({ apiKey: key });
 }
 
-// ─── Stage 1: Discovery via Groq knowledge ─────────────────────────────────
-// Groq knows all major IIT clubs from training data — much more reliable
-// than scraping sites that block bots.
+function getTavilyKey(): string {
+  const key = process.env.TAVILY_API_KEY;
+  if (!key) throw new Error("TAVILY_API_KEY not set — get a free key at app.tavily.com");
+  return key;
+}
+
+// ─── Tavily search ────────────────────────────────────────────────────────────
+
+async function tavilySearch(query: string, maxResults = 5): Promise<{
+  results: Array<{ title: string; url: string; content: string; score: number }>;
+  answer?: string;
+}> {
+  const res = await fetch("https://api.tavily.com/search", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      api_key: getTavilyKey(),
+      query,
+      max_results: maxResults,
+      search_depth: "advanced",
+      include_answer: true,
+      include_raw_content: false,
+    }),
+    signal: AbortSignal.timeout(15000),
+  });
+
+  if (!res.ok) {
+    const err = await res.text();
+    throw new Error(`Tavily error ${res.status}: ${err}`);
+  }
+
+  return res.json();
+}
+
+// ─── Groq with retry ─────────────────────────────────────────────────────────
+
+async function groqWithRetry<T>(fn: () => Promise<T>, retries = 3): Promise<T> {
+  for (let i = 0; i < retries; i++) {
+    try {
+      return await fn();
+    } catch (err: unknown) {
+      const msg = String(err);
+      if (msg.includes("429") && i < retries - 1) {
+        const match = msg.match(/try again in (\d+)ms/);
+        const wait = match ? parseInt(match[1]) + 500 : 3000 * (i + 1);
+        await sleep(wait);
+        continue;
+      }
+      throw err;
+    }
+  }
+  throw new Error("Max retries exceeded");
+}
+
+// ─── Stage 1: Discovery ───────────────────────────────────────────────────────
 
 export async function runDiscoveryAgent(
   iitId: IITId,
@@ -110,160 +159,150 @@ export async function runDiscoveryAgent(
   const iit = IIT_SEED_REGISTRY.find((i) => i.id === iitId);
   if (!iit) throw new Error(`Unknown IIT: ${iitId}`);
 
-  const groq = getGroqClient();
+  const groq = getGroq();
   const result: DiscoveryResult = { iitId, clubs: [], pagesVisited: 0, errors: [] };
 
-  onProgress?.({ stage: "discovery", iitId, progress: 20, message: `Querying Groq knowledge for ${iit.fullName} clubs...` });
+  onProgress?.({ stage: "discovery", iitId, progress: 20,
+    message: `Searching for ${iit.fullName} clubs...` });
 
-  try {
-    const response = await groq.chat.completions.create({
-      model: "llama-3.1-8b-instant",
-      messages: [
-        {
-          role: "system",
-          content: `You are a comprehensive database of Indian Institute of Technology (IIT) student clubs and societies.
-Return ONLY a JSON object listing real, well-known student clubs at the specified IIT.
-Format: { "clubs": [{ "name": "Club Name", "category": "technical|cultural|entrepreneurship|research|sports|social|media|hobby", "url": "website if known or empty string", "description": "1-2 sentence description" }] }
-Include technical clubs, cultural clubs, entrepreneurship cells, research groups, sports clubs, media bodies.
-List at least 20 clubs. Only include clubs you are confident exist at this institution.`,
-        },
-        {
-          role: "user",
-          content: `List all major student clubs and societies at ${iit.fullName} (${iit.city}). Include their websites if you know them.`,
-        },
-      ],
-      temperature: 0.1,
-      max_tokens: 3000,
-      response_format: { type: "json_object" },
-    });
+  // Search for the club directory with real web results
+  const searchResults = await tavilySearch(
+    `${iit.fullName} student clubs societies list site:${iit.id}.ac.in OR gymkhana`,
+    8
+  );
 
-    const content = response.choices[0]?.message?.content ?? "{}";
-    const parsed = JSON.parse(content) as { clubs?: Array<{ name: string; url?: string; category?: string; description?: string }> };
-    const clubs = parsed.clubs ?? [];
+  result.pagesVisited = searchResults.results.length;
 
-    for (const club of clubs) {
-      if (club.name?.length > 1) {
-        result.clubs.push({
-          name: club.name.trim(),
-          url: club.url ?? "",
-          iitId,
-        });
-      }
+  const context = [
+    searchResults.answer ?? "",
+    ...searchResults.results.map(r => `[${r.title}]\n${r.url}\n${r.content}`),
+  ].join("\n\n---\n\n").slice(0, 6000);
+
+  onProgress?.({ stage: "discovery", iitId, progress: 60,
+    message: `Extracting club list from search results...` });
+
+  const response = await groqWithRetry(() => groq.chat.completions.create({
+    model: "llama-3.1-8b-instant",
+    messages: [
+      {
+        role: "system",
+        content: `Extract a list of real student clubs at this IIT from the search results.
+Return ONLY JSON: { "clubs": [{ "name": "exact club name", "url": "website url if found or empty", "category": "technical|cultural|entrepreneurship|research|sports|social|media|hobby" }] }
+List every distinct club you can find. Be accurate — only include clubs that appear in the search results.`,
+      },
+      {
+        role: "user",
+        content: `IIT: ${iit.fullName} (${iit.city})\n\nSearch results:\n${context}`,
+      },
+    ],
+    temperature: 0.1,
+    max_tokens: 2000,
+    response_format: { type: "json_object" },
+  }));
+
+  const parsed = JSON.parse(response.choices[0]?.message?.content ?? "{}") as {
+    clubs?: Array<{ name: string; url?: string; category?: string }>;
+  };
+
+  for (const club of parsed.clubs ?? []) {
+    if (club.name?.length > 1) {
+      result.clubs.push({ name: club.name.trim(), url: club.url ?? "", iitId });
     }
-
-    // Also try to fetch the real directory page for extra clubs
-    try {
-      const urlsToTry = [iit.clubDirectoryUrl, ...(iit.fallbackUrls ?? [])].filter(Boolean);
-      for (const url of urlsToTry) {
-        const res = await fetch(url as string, {
-          headers: { "User-Agent": "Mozilla/5.0 (compatible; NexusBot/1.0)" },
-          signal: AbortSignal.timeout(8000),
-        });
-        if (res.ok) {
-          const html = await res.text();
-          const text = html.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").slice(0, 4000);
-          result.pagesVisited++;
-
-          // Ask Groq to extract any additional clubs from the live page
-          const liveResponse = await groq.chat.completions.create({
-            model: "llama-3.1-8b-instant",
-            messages: [
-              { role: "system", content: `Extract club names and URLs from this website text. Return JSON: { "clubs": [{ "name": "string", "url": "string or empty" }] }` },
-              { role: "user", content: text },
-            ],
-            temperature: 0.1,
-            max_tokens: 1000,
-            response_format: { type: "json_object" },
-          });
-
-          const liveParsed = JSON.parse(liveResponse.choices[0]?.message?.content ?? "{}") as { clubs?: Array<{ name: string; url?: string }> };
-          for (const club of liveParsed.clubs ?? []) {
-            if (club.name?.length > 1 && !result.clubs.find(c => c.name.toLowerCase() === club.name.toLowerCase())) {
-              result.clubs.push({ name: club.name.trim(), url: resolveUrl(club.url, url as string), iitId });
-            }
-          }
-          break;
-        }
-      }
-    } catch {
-      // Live fetch failed — Groq knowledge is sufficient
-    }
-
-  } catch (err) {
-    result.errors.push(String(err));
-    throw err;
   }
 
-  result.clubs = deduplicateClubs(result.clubs);
-  onProgress?.({ stage: "discovery", iitId, progress: 100, message: `Found ${result.clubs.length} clubs at ${iit.fullName}`, data: result.clubs });
+  result.clubs = dedup(result.clubs);
+
+  onProgress?.({ stage: "discovery", iitId, progress: 100,
+    message: `Found ${result.clubs.length} clubs at ${iit.fullName}`,
+    data: result.clubs });
+
   return result;
 }
 
-// ─── Stage 2: Profile enrichment ──────────────────────────────────────────────
+// ─── Stage 2: Profile with real web search ────────────────────────────────────
 
 export async function runProfileAgent(
   club: ClubLink,
   onProgress?: (e: ProgressEvent) => void
 ): Promise<ProfileResult> {
-  const groq = getGroqClient();
+  const groq = getGroq();
   const iit = IIT_SEED_REGISTRY.find((i) => i.id === club.iitId);
-  let rawPageText = "";
+  const iitName = iit?.fullName ?? club.iitId.toUpperCase();
 
-  // Try to fetch real page first
-  if (club.url) {
-    try {
-      const res = await fetch(club.url, {
-        headers: { "User-Agent": "Mozilla/5.0" },
-        signal: AbortSignal.timeout(8000),
-      });
-      if (res.ok) {
-        const html = await res.text();
-        rawPageText = html.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim().slice(0, 6000);
-      }
-    } catch { /* use Groq knowledge instead */ }
-  }
+  onProgress?.({ stage: "profile", iitId: club.iitId, clubName: club.name,
+    progress: 20, message: `Searching real info for ${club.name}...` });
 
-  onProgress?.({ stage: "profile", iitId: club.iitId, clubName: club.name, progress: 50, message: `Enriching ${club.name}...` });
+  // Real web search for this specific club
+  const [generalSearch, eventSearch] = await Promise.all([
+    tavilySearch(`"${club.name}" "${iitName}" club about members activities`, 4).catch(() => ({ results: [], answer: "" })),
+    tavilySearch(`"${club.name}" "${iitName}" events hackathon workshop 2024 2025`, 3).catch(() => ({ results: [], answer: "" })),
+  ]);
 
-  const contextPrompt = rawPageText
-    ? `Page content:\n${rawPageText}`
-    : `Use your knowledge about ${club.name} at ${iit?.fullName ?? club.iitId.toUpperCase()}.`;
+  const rawPageText = [
+    generalSearch.answer ?? "",
+    ...generalSearch.results.map(r => `SOURCE: ${r.url}\nTITLE: ${r.title}\n${r.content}`),
+    "--- EVENTS ---",
+    ...eventSearch.results.map(r => `SOURCE: ${r.url}\nTITLE: ${r.title}\n${r.content}`),
+  ].join("\n\n").slice(0, 8000);
 
-  const response = await groq.chat.completions.create({
+  const sourceUrl = generalSearch.results[0]?.url ?? club.url ?? "";
+
+  onProgress?.({ stage: "profile", iitId: club.iitId, clubName: club.name,
+    progress: 70, message: `Structuring profile...` });
+
+  const response = await groqWithRetry(() => groq.chat.completions.create({
     model: "llama-3.1-8b-instant",
     messages: [
       {
         role: "system",
-        content: `Return detailed info about this IIT student club as JSON:
+        content: `You are extracting REAL, ACCURATE data about an IIT student club from web search results.
+Only use information that actually appears in the sources. Do NOT hallucinate.
+Return JSON:
 {
-  "name": "string",
-  "tagline": "string",
-  "description": "2-3 sentences",
+  "name": "official club name",
+  "tagline": "their actual tagline/motto if found",
+  "description": "accurate 2-3 sentence description based on sources",
   "category": "technical|cultural|entrepreneurship|research|sports|social|media|hobby",
-  "instagramUrl": "string or null",
-  "githubUrl": "string or null",
-  "email": "string or null",
-  "foundedYear": number or null,
+  "websiteUrl": "official website url",
+  "instagramUrl": "instagram url if found",
+  "githubUrl": "github url if found",
+  "email": "contact email if found",
+  "foundedYear": year as number or null,
   "memberCount": number or null,
-  "isRecruiting": boolean,
-  "tags": ["tag1", "tag2"],
-  "events": [{ "title": "string", "description": "string", "eventType": "hackathon|workshop|talk|competition|recruitment", "registrationUrl": "string or null" }]
+  "isRecruiting": true or false,
+  "tags": ["tag1", "tag2", "tag3"],
+  "events": [
+    {
+      "title": "real event name",
+      "description": "what the event is",
+      "eventType": "hackathon|workshop|talk|competition|fest|recruitment",
+      "startDate": "date if mentioned",
+      "registrationUrl": "url if found",
+      "prizePool": "prize if mentioned"
+    }
+  ]
 }`,
       },
-      { role: "user", content: `Club: ${club.name} at ${iit?.fullName ?? club.iitId.toUpperCase()}\n${contextPrompt}` },
+      {
+        role: "user",
+        content: `Club: ${club.name}\nIIT: ${iitName}\n\nReal web data:\n${rawPageText}`,
+      },
     ],
-    temperature: 0.2,
-    max_tokens: 1200,
+    temperature: 0.1,
+    max_tokens: 1500,
     response_format: { type: "json_object" },
-  }).catch(() => null);
+  })).catch(() => null);
 
-  const data = response ? JSON.parse(response.choices[0]?.message?.content ?? "{}") as Record<string, unknown> : {};
+  const data = response
+    ? (JSON.parse(response.choices[0]?.message?.content ?? "{}") as Record<string, unknown>)
+    : {};
 
   const profile: ClubProfile = {
     name: String(data.name ?? club.name),
     tagline: data.tagline ? String(data.tagline) : undefined,
     description: String(data.description ?? ""),
     category: String(data.category ?? inferCategory(club.name)),
+    websiteUrl: String(data.websiteUrl ?? club.url ?? ""),
     instagramUrl: data.instagramUrl ? String(data.instagramUrl) : undefined,
     githubUrl: data.githubUrl ? String(data.githubUrl) : undefined,
     email: data.email ? String(data.email) : undefined,
@@ -271,21 +310,24 @@ export async function runProfileAgent(
     memberCount: data.memberCount ? Number(data.memberCount) : undefined,
     isRecruiting: Boolean(data.isRecruiting),
     tags: Array.isArray(data.tags) ? data.tags.map(String) : extractTags(club.name),
-    websiteUrl: club.url || undefined,
   };
 
-  const events: ClubEvent[] = (Array.isArray(data.events) ? data.events : []).map((e: Record<string, unknown>) => ({
-    title: String(e.title ?? "Event"),
-    description: String(e.description ?? ""),
-    eventType: String(e.eventType ?? "event"),
-    registrationUrl: e.registrationUrl ? String(e.registrationUrl) : undefined,
-    rawText: JSON.stringify(e),
-  }));
+  const events: ClubEvent[] = (Array.isArray(data.events) ? data.events : []).map(
+    (e: Record<string, unknown>) => ({
+      title: String(e.title ?? "Event"),
+      description: String(e.description ?? ""),
+      eventType: String(e.eventType ?? "event"),
+      startDate: e.startDate ? String(e.startDate) : undefined,
+      registrationUrl: e.registrationUrl ? String(e.registrationUrl) : undefined,
+      prizePool: e.prizePool ? String(e.prizePool) : undefined,
+      rawText: JSON.stringify(e),
+    })
+  );
 
-  return { profile, events, rawPageText: rawPageText || `${club.name} at ${iit?.fullName}`, sourceUrl: club.url || iit?.clubDirectoryUrl || "" };
+  return { profile, events, rawPageText, sourceUrl };
 }
 
-// ─── Stage 3: Knowledge extraction ───────────────────────────────────────────
+// ─── Stage 3: Real tacit knowledge extraction ─────────────────────────────────
 
 export async function runKnowledgeExtractor(
   clubName: string,
@@ -294,100 +336,96 @@ export async function runKnowledgeExtractor(
   sourceUrl: string,
   onProgress?: (e: ProgressEvent) => void
 ): Promise<KnowledgeResult> {
-  const groq = getGroqClient();
-  onProgress?.({ stage: "knowledge", iitId: "", clubName, progress: 20, message: `Extracting tacit knowledge...` });
+  const groq = getGroq();
 
-  const response = await groq.chat.completions.create({
+  onProgress?.({ stage: "knowledge", iitId: "", clubName, progress: 20,
+    message: `Deep searching ${clubName}...` });
+
+  // 4 targeted searches for rich real data
+  const [recruitSearch, projectSearch, eventSearch, achieveSearch] = await Promise.all([
+    tavilySearch(`"${clubName}" "${iitName}" how to join recruitment criteria skills required`, 3).catch(() => ({ results: [], answer: "" })),
+    tavilySearch(`"${clubName}" "${iitName}" projects built competitions won achievements`, 3).catch(() => ({ results: [], answer: "" })),
+    tavilySearch(`"${clubName}" "${iitName}" upcoming events 2024 2025 hackathon workshop fest`, 3).catch(() => ({ results: [], answer: "" })),
+    tavilySearch(`"${clubName}" "${iitName}" awards wins rankings notable alumni`, 2).catch(() => ({ results: [], answer: "" })),
+  ]);
+
+  const enrichedText = [
+    "=== ABOUT ===",
+    rawPageText.slice(0, 2000),
+    "=== RECRUITMENT ===",
+    recruitSearch.answer ?? "",
+    ...recruitSearch.results.map(r => `[${r.title}] ${r.url}\n${r.content}`),
+    "=== PROJECTS ===",
+    projectSearch.answer ?? "",
+    ...projectSearch.results.map(r => `[${r.title}] ${r.url}\n${r.content}`),
+    "=== EVENTS ===",
+    eventSearch.answer ?? "",
+    ...eventSearch.results.map(r => `[${r.title}] ${r.url}\n${r.content}`),
+    "=== ACHIEVEMENTS ===",
+    achieveSearch.answer ?? "",
+    ...achieveSearch.results.map(r => `[${r.title}] ${r.url}\n${r.content}`),
+  ].join("\n\n").slice(0, 10000);
+
+  onProgress?.({ stage: "knowledge", iitId: "", clubName, progress: 70,
+    message: `Structuring knowledge items...` });
+
+  const response = await groqWithRetry(() => groq.chat.completions.create({
     model: "llama-3.1-8b-instant",
     messages: [
       {
         role: "system",
-        content: `Extract TACIT knowledge about this IIT student club — info seniors know but isn't written down.
-Return ONLY JSON:
+        content: `You extract REAL, SPECIFIC knowledge about an IIT student club from web search results.
+Use ONLY information from the sources. Be specific — mention actual project names, event names, competition results.
+Return JSON:
 {
-  "summary": "2-3 sentence punchy summary for a student deciding whether to join",
+  "summary": "punchy 2-3 sentence summary a first-year student would find useful",
   "knowledgeItems": [
     {
       "knowledgeType": "recruitment_criteria|project_highlight|culture_insight|skill_requirements|timeline|achievement|resource",
-      "title": "short specific title",
-      "content": "concrete, actionable content — not vague",
-      "confidence": 0.7-1.0
+      "title": "specific title (e.g. 'Techfest Robotics Competition Winners' not just 'Achievement')",
+      "content": "specific real content with names, dates, numbers where available",
+      "confidence": 0.5-1.0
     }
   ]
 }
-Generate 4-8 items covering: who gets selected, what you actually build, culture, skills needed, when to apply.`,
+Aim for 6-10 items covering: how to join, what projects they build, culture/vibe, skills needed, when they recruit, awards won, useful links.`,
       },
-      { role: "user", content: `Club: ${clubName} (${iitName})\n\n${rawPageText}` },
+      {
+        role: "user",
+        content: `Club: ${clubName}\nIIT: ${iitName}\nSource: ${sourceUrl}\n\n${enrichedText}`,
+      },
     ],
-    temperature: 0.2,
-    max_tokens: 2000,
+    temperature: 0.1,
+    max_tokens: 2500,
     response_format: { type: "json_object" },
-  }).catch(() => null);
+  })).catch(() => null);
 
   if (!response) return { knowledgeItems: [], summary: "" };
 
   const parsed = JSON.parse(response.choices[0]?.message?.content ?? "{}") as KnowledgeResult;
   const items = (parsed.knowledgeItems ?? [])
-    .filter((i) => i.title && i.content)
-    .map((i) => ({ ...i, sourceUrl, confidence: Math.min(1, Math.max(0, Number(i.confidence) || 0.7)) }));
+    .filter((i) => i.title && i.content && i.content.length > 20)
+    .map((i) => ({
+      ...i,
+      sourceUrl,
+      confidence: Math.min(1, Math.max(0, Number(i.confidence) || 0.7)),
+    }));
 
-  onProgress?.({ stage: "knowledge", iitId: "", clubName, progress: 100, message: `Extracted ${items.length} items` });
+  onProgress?.({ stage: "knowledge", iitId: "", clubName, progress: 100,
+    message: `Extracted ${items.length} knowledge items for ${clubName}` });
+
   return { knowledgeItems: items, summary: parsed.summary ?? "" };
 }
 
-// ─── Profile-aware auto-discovery ─────────────────────────────────────────────
-// Reads the student profile to find their home IIT, returns it as primary IIT
-
-export async function detectHomeIIT(universityName: string): Promise<IITId | null> {
-  const lower = universityName.toLowerCase();
-  const map: Record<string, IITId> = {
-    "iit bombay": "iitb", "iitb": "iitb", "bombay": "iitb",
-    "iit delhi": "iitd", "iitd": "iitd", "delhi": "iitd",
-    "iit kanpur": "iitk", "iitk": "iitk", "kanpur": "iitk",
-    "iit madras": "iitm", "iitm": "iitm", "madras": "iitm", "chennai": "iitm",
-    "iit roorkee": "iitr", "iitr": "iitr", "roorkee": "iitr",
-    "iit hyderabad": "iith", "iith": "iith", "hyderabad": "iith",
-    "iit guwahati": "iitg", "iitg": "iitg", "guwahati": "iitg",
-    "iit bhubaneswar": "iitbbs", "iitbbs": "iitbbs", "bhubaneswar": "iitbbs",
-  };
-  for (const [key, id] of Object.entries(map)) {
-    if (lower.includes(key)) return id;
-  }
-  return null;
-}
-
-// ─── Search ───────────────────────────────────────────────────────────────────
-
-export async function queryNexusKnowledge(
-  userQuery: string,
-  retrievedChunks: Array<{ clubName: string; iitId: string; content: string; knowledgeType: string }>
-): Promise<string> {
-  const groq = getGroqClient();
-  const context = retrievedChunks
-    .map((c) => `[${c.clubName} — ${c.iitId.toUpperCase()} — ${c.knowledgeType}]\n${c.content}`)
-    .join("\n\n---\n\n");
-
-  const response = await groq.chat.completions.create({
-    model: "llama-3.1-8b-instant",
-    messages: [
-      { role: "system", content: "You are Nexus, an AI guide for IIT students. Answer using ONLY the provided context. Be specific and student-friendly." },
-      { role: "user", content: `Context:\n${context}\n\nQuestion: ${userQuery}` },
-    ],
-    temperature: 0.4,
-    max_tokens: 800,
-  });
-  return response.choices[0]?.message?.content ?? "Couldn't find relevant info.";
-}
-
-// ─── Pipeline orchestrator ────────────────────────────────────────────────────
+// ─── Pipeline ─────────────────────────────────────────────────────────────────
 
 export async function* runNexusPipeline(
   options: NexusCrawlOptions = {}
 ): AsyncGenerator<ProgressEvent & { type: "progress" | "result" | "error" | "done" }> {
   const {
     iitIds = IIT_SEED_REGISTRY.map((i) => i.id as IITId),
-    maxClubsPerIIT = 20,
-    delayBetweenRequestsMs = 800,
+    maxClubsPerIIT = 10,
+    delayBetweenRequestsMs = 2000,
     stages = ["discovery", "profile", "knowledge"],
   } = options;
 
@@ -397,7 +435,8 @@ export async function* runNexusPipeline(
     const iit = IIT_SEED_REGISTRY.find((i) => i.id === iitId);
     if (!iit) continue;
 
-    yield { type: "progress", stage: "discovery", iitId, progress: 0, message: `Starting ${iit.fullName}...` };
+    yield { type: "progress", stage: "discovery", iitId, progress: 0,
+      message: `Starting ${iit.fullName}...` };
 
     let discoveredClubs: ClubLink[] = [];
 
@@ -405,9 +444,12 @@ export async function* runNexusPipeline(
       try {
         const discovery = await runDiscoveryAgent(iitId);
         discoveredClubs = discovery.clubs.slice(0, maxClubsPerIIT);
-        yield { type: "result", stage: "discovery", iitId, progress: 25, message: `Discovered ${discoveredClubs.length} clubs at ${iit.fullName}`, data: discoveredClubs };
+        yield { type: "result", stage: "discovery", iitId, progress: 20,
+          message: `Discovered ${discoveredClubs.length} clubs at ${iit.fullName}`,
+          data: discoveredClubs };
       } catch (err) {
-        yield { type: "error", stage: "discovery", iitId, progress: 0, message: `Discovery failed: ${String(err)}` };
+        yield { type: "error", stage: "discovery", iitId, progress: 0,
+          message: `Discovery failed: ${String(err)}` };
         continue;
       }
     }
@@ -416,23 +458,33 @@ export async function* runNexusPipeline(
 
     for (let i = 0; i < discoveredClubs.length; i++) {
       const club = discoveredClubs[i];
-      const clubProgress = Math.round(25 + (i / discoveredClubs.length) * 70);
+      const clubProgress = Math.round(20 + (i / discoveredClubs.length) * 75);
 
-      yield { type: "progress", stage: "profile", iitId, clubName: club.name, progress: clubProgress, message: `Processing ${club.name} (${i + 1}/${discoveredClubs.length})` };
+      yield { type: "progress", stage: "profile", iitId, clubName: club.name,
+        progress: clubProgress,
+        message: `Processing ${club.name} (${i + 1}/${discoveredClubs.length})` };
 
       const clubEntry: Record<string, unknown> = { link: club };
 
       if (stages.includes("profile")) {
-        const profile = await runProfileAgent(club);
-        clubEntry.profile = profile;
+        const profile = await runProfileAgent(club).catch(() => null);
+        if (profile) clubEntry.profile = profile;
       }
 
       if (stages.includes("knowledge") && (clubEntry.profile as ProfileResult | undefined)?.rawPageText) {
-        await sleep(400);
+        await sleep(1000);
         const p = clubEntry.profile as ProfileResult;
-        const knowledge = await runKnowledgeExtractor(club.name, iit.fullName, p.rawPageText, p.sourceUrl);
+        const knowledge = await runKnowledgeExtractor(
+          club.name, iit.fullName, p.rawPageText, p.sourceUrl
+        ).catch(() => ({ knowledgeItems: [], summary: "" }));
         clubEntry.knowledge = knowledge;
-        yield { type: "result", stage: "knowledge", iitId, clubName: club.name, progress: clubProgress, message: `Extracted ${knowledge.knowledgeItems.length} knowledge items for ${club.name}`, data: clubEntry };
+
+        yield {
+          type: "result", stage: "knowledge", iitId, clubName: club.name,
+          progress: clubProgress,
+          message: `Extracted ${knowledge.knowledgeItems.length} knowledge items for ${club.name}`,
+          data: clubEntry,
+        };
       }
 
       iitResult.clubs.push(clubEntry);
@@ -440,22 +492,65 @@ export async function* runNexusPipeline(
     }
 
     allResults.push(iitResult);
-    yield { type: "progress", stage: "done", iitId, progress: 100, message: `Completed ${iit.fullName}: ${iitResult.clubs.length} clubs`, data: iitResult };
+    yield { type: "progress", stage: "done", iitId, progress: 100,
+      message: `Completed ${iit.fullName}: ${iitResult.clubs.length} clubs`,
+      data: iitResult };
   }
 
-  yield { type: "done", stage: "pipeline", iitId: "all", progress: 100, message: `Nexus complete. Processed clubs across ${allResults.length} IITs.`, data: allResults };
+  yield { type: "done", stage: "pipeline", iitId: "all", progress: 100,
+    message: `Nexus complete. Processed clubs across ${allResults.length} IITs.`,
+    data: allResults };
 }
 
-// ─── Utilities ────────────────────────────────────────────────────────────────
+// ─── Search answer ────────────────────────────────────────────────────────────
 
-function resolveUrl(url: string | undefined, base: string): string {
-  if (!url) return "";
-  try { return new URL(url, base).toString(); } catch { return url; }
+export async function queryNexusKnowledge(
+  userQuery: string,
+  chunks: Array<{ clubName: string; iitId: string; content: string; knowledgeType: string }>
+): Promise<string> {
+  const groq = getGroq();
+  const context = chunks
+    .map((c) => `[${c.clubName} — ${c.iitId.toUpperCase()} — ${c.knowledgeType}]\n${c.content}`)
+    .join("\n\n---\n\n");
+
+  const response = await groq.chat.completions.create({
+    model: "llama-3.1-8b-instant",
+    messages: [
+      { role: "system", content: "You are Nexus, an AI guide for IIT students. Answer using ONLY the provided context. Be specific and student-friendly. If the context is insufficient, say so." },
+      { role: "user", content: `Context:\n${context}\n\nQuestion: ${userQuery}` },
+    ],
+    temperature: 0.3,
+    max_tokens: 600,
+  });
+
+  return response.choices[0]?.message?.content ?? "Couldn't find relevant information.";
 }
 
-function deduplicateClubs(clubs: ClubLink[]): ClubLink[] {
+export async function detectHomeIIT(universityName: string): Promise<IITId | null> {
+  const lower = universityName.toLowerCase();
+  const map: Record<string, IITId> = {
+    "bombay": "iitb", "iitb": "iitb", "delhi": "iitd", "iitd": "iitd",
+    "kanpur": "iitk", "iitk": "iitk", "madras": "iitm", "iitm": "iitm",
+    "chennai": "iitm", "roorkee": "iitr", "iitr": "iitr",
+    "hyderabad": "iith", "iith": "iith", "guwahati": "iitg", "iitg": "iitg",
+    "bhubaneswar": "iitbbs", "iitbbs": "iitbbs",
+  };
+  for (const [key, id] of Object.entries(map)) {
+    if (lower.includes(key)) return id;
+  }
+  return null;
+}
+
+// ─── Utils ────────────────────────────────────────────────────────────────────
+
+function dedup(clubs: ClubLink[]): ClubLink[] {
   const seen = new Set<string>();
-  return clubs.filter((c) => { const k = c.name.toLowerCase().trim(); if (seen.has(k)) return false; seen.add(k); return true; });
+  return clubs.filter((c) => {
+    const k = c.name.toLowerCase().trim();
+    if (seen.has(k)) return false;
+    seen.add(k);
+    return true;
+  });
 }
 
 function inferCategory(text: string): string {
