@@ -68,6 +68,13 @@ Places learner inside a structured roadmap:
 
 Not linear learning --- a **Directed Acyclic Knowledge Graph.**
 
+### 🖱 Interactive Graph Interface 
+
+-   Full visual roadmap with clickable nodes\
+-   Color-coded status: Completed / In-Progress / Next / Locked\
+-   Click any node → Right panel slides open with resources\
+-   No separate input box — exploration is graph-driven
+
 ------------------------------------------------------------------------
 
 # 3️⃣ Cognitive Gap Analyzer
@@ -103,6 +110,18 @@ Ranked by:
 -   Relevance to learner gap
 
 No noise. Only progression.
+
+### 🔗 External Resource Checkpoints
+
+Ingest external links (Medium articles, YouTube videos):
+
+-   AI analyzes and maps to relevant roadmap node\
+-   Creates **branch checkpoint** (doesn't alter main roadmap)\
+-   Adds one-line AI comment: prerequisites + timing advice\
+-   Visual: Orange dashed nodes branching off main path
+
+Example:
+> "Complete Attention Mechanism first, then explore Vision Transformers in ~2 weeks"
 
 ------------------------------------------------------------------------
 
