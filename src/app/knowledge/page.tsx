@@ -6,7 +6,7 @@ import { KnowledgeList } from "@/components/knowledge/knowledge-list";
 import { KnowledgeGraph } from "@/components/knowledge/knowledge-graph";
 import { KnowledgeSearch } from "@/components/knowledge/knowledge-search";
 import { CopilotRunner } from "@/components/knowledge/copilot-runner";
-import { RoadmapRenderer } from "@/components/knowledge/roadmap-renderer";
+import { InteractiveRoadmap } from "@/components/knowledge/interactive-roadmap";
 import { AdaptiveTimeline } from "@/components/knowledge/adaptive-timeline";
 import { type CopilotState } from "@/lib/ai/copilot-orchestrator";
 import { Separator } from "@/components/ui/separator";
@@ -22,7 +22,7 @@ export default function KnowledgePage() {
     const [copilotState, setCopilotState] = useState<CopilotState | null>(null);
 
     return (
-        <div className="flex flex-col h-full space-y-8 p-6 md:p-8 max-w-5xl mx-auto w-full">
+        <div className="flex flex-col h-full space-y-8 p-6 md:p-8 max-w-7xl mx-auto w-full">
             <div className="flex items-center justify-between">
                 <div className="flex items-center gap-4">
                     <div className="bg-gradient-to-br from-violet-500/20 to-purple-500/20 p-3 rounded-xl border border-purple-500/10">
@@ -77,8 +77,8 @@ export default function KnowledgePage() {
 
             <Separator className="bg-white/5" />
 
-            {/* §2 Concept Dependency Graph + §3 Cognitive Gap Analyzer */}
-            <RoadmapRenderer />
+            {/* Interactive Roadmap Graph - roadmap.sh style */}
+            <InteractiveRoadmap />
 
             <Separator className="bg-white/5" />
 
