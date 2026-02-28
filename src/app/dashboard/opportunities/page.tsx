@@ -5,6 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
     Dialog,
     DialogContent,
@@ -27,10 +28,13 @@ import {
     Eye,
     ShieldCheck,
     XCircle,
+    Search,
+    Inbox,
 } from "lucide-react";
 import { toast } from "sonner";
 import { applyToEvent } from "@/actions/apply-to-event";
 import type { Opportunity } from "@/db/schema";
+import { OpportunityFinder } from "@/components/opportunities/opportunity-finder";
 
 // --- Agent progress steps ---
 const AGENT_STEPS = [
@@ -434,73 +438,95 @@ export default function OpportunitiesPage() {
             <header className="flex items-center justify-between border-b border-white/10 pb-6">
                 <div>
                     <h1 className="text-3xl font-bold bg-gradient-to-r from-violet-400 to-cyan-400 bg-clip-text text-transparent">
-                        Opportunity Feed
+                        Opportunities
                     </h1>
                     <p className="text-muted-foreground text-sm mt-1">
-                        AI-filtered opportunities from your connected sources. Review, customize, and auto-apply.
+                        AI-powered opportunity discovery and application automation
                     </p>
                 </div>
                 <div className="flex items-center gap-2 bg-violet-500/10 px-3 py-1.5 rounded-full border border-violet-500/20">
                     <Zap className="h-3.5 w-3.5 text-violet-400" />
                     <span className="text-xs text-violet-300 font-mono font-bold">
-                        {opportunities.length} OPPORTUNITIES
+                        {opportunities.length} IN FEED
                     </span>
                 </div>
             </header>
 
-            {/* Stats row */}
-            <div className="grid grid-cols-3 gap-4">
-                {[
-                    {
-                        label: "Pending",
-                        count: opportunities.filter((o) => o.status === "pending").length,
-                        color: "text-cyan-400",
-                    },
-                    {
-                        label: "Applied",
-                        count: opportunities.filter((o) => o.status === "applied").length,
-                        color: "text-green-400",
-                    },
-                    {
-                        label: "Rejected",
-                        count: opportunities.filter((o) => o.status === "rejected").length,
-                        color: "text-red-400",
-                    },
-                ].map((stat) => (
-                    <div
-                        key={stat.label}
-                        className="bg-white/5 border border-white/10 rounded-xl p-4 text-center"
-                    >
-                        <p className={`text-2xl font-bold font-mono ${stat.color}`}>{stat.count}</p>
-                        <p className="text-xs text-muted-foreground uppercase tracking-widest mt-1">
-                            {stat.label}
-                        </p>
-                    </div>
-                ))}
-            </div>
+            {/* Tabs for AI Finder and Feed */}
+            <Tabs defaultValue="finder" className="space-y-6">
+                <TabsList className="bg-white/5 border border-white/10 p-1">
+                    <TabsTrigger value="finder" className="data-[state=active]:bg-violet-500/20 data-[state=active]:text-violet-300">
+                        <Search className="h-4 w-4 mr-2" />
+                        AI Finder
+                    </TabsTrigger>
+                    <TabsTrigger value="feed" className="data-[state=active]:bg-cyan-500/20 data-[state=active]:text-cyan-300">
+                        <Inbox className="h-4 w-4 mr-2" />
+                        Feed ({opportunities.length})
+                    </TabsTrigger>
+                </TabsList>
 
-            {/* Card Grid */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                {opportunities.map((opp) => (
-                    <OpportunityCard
-                        key={opp.id}
-                        opportunity={opp}
-                        onAutoFill={handleAutoFill}
-                        isProcessing={processingId === opp.id}
-                        activeAgentStep={processingId === opp.id ? agentStep : null}
-                    />
-                ))}
+                {/* AI Finder Tab */}
+                <TabsContent value="finder" className="space-y-6">
+                    <OpportunityFinder />
+                </TabsContent>
 
-                {opportunities.length === 0 && (
-                    <div className="col-span-full flex flex-col items-center justify-center h-64 border border-dashed border-white/10 rounded-xl">
-                        <Target className="h-8 w-8 text-muted-foreground mb-4 opacity-50" />
-                        <p className="text-muted-foreground">No opportunities yet.</p>
-                        <p className="text-xs text-muted-foreground/60 mt-1">
-                            Events from WhatsApp &amp; Telegram will appear here once filtered by AI.
-                        </p>
+                {/* Feed Tab */}
+                <TabsContent value="feed" className="space-y-6">
+                    {/* Stats row */}
+                    <div className="grid grid-cols-3 gap-4">
+                        {[
+                            {
+                                label: "Pending",
+                                count: opportunities.filter((o) => o.status === "pending").length,
+                                color: "text-cyan-400",
+                            },
+                            {
+                                label: "Applied",
+                                count: opportunities.filter((o) => o.status === "applied").length,
+                                color: "text-green-400",
+                            },
+                            {
+                                label: "Rejected",
+                                count: opportunities.filter((o) => o.status === "rejected").length,
+                                color: "text-red-400",
+                            },
+                        ].map((stat) => (
+                            <div
+                                key={stat.label}
+                                className="bg-white/5 border border-white/10 rounded-xl p-4 text-center"
+                            >
+                                <p className={`text-2xl font-bold font-mono ${stat.color}`}>{stat.count}</p>
+                                <p className="text-xs text-muted-foreground uppercase tracking-widest mt-1">
+                                    {stat.label}
+                                </p>
+                            </div>
+                        ))}
                     </div>
-                )}
-            </div>
+
+                    {/* Card Grid */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                        {opportunities.map((opp) => (
+                            <OpportunityCard
+                                key={opp.id}
+                                opportunity={opp}
+                                onAutoFill={handleAutoFill}
+                                isProcessing={processingId === opp.id}
+                                activeAgentStep={processingId === opp.id ? agentStep : null}
+                            />
+                        ))}
+
+                        {opportunities.length === 0 && (
+                            <div className="col-span-full flex flex-col items-center justify-center h-64 border border-dashed border-white/10 rounded-xl">
+                                <Target className="h-8 w-8 text-muted-foreground mb-4 opacity-50" />
+                                <p className="text-muted-foreground">No opportunities yet.</p>
+                                <p className="text-xs text-muted-foreground/60 mt-1">
+                                    Events from WhatsApp &amp; Telegram will appear here once filtered by AI.
+                                </p>
+                            </div>
+                        )}
+                    </div>
+                </TabsContent>
+            </Tabs>
 
             {/* Verification Modal */}
             <VerificationModal
